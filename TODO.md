@@ -1,0 +1,3 @@
+- [ ] Update app/src/pages/Orders.tsx: require customerName for delivery + dine_in in placeOrder()
+- [ ] Update app/src/pages/Orders.tsx: disable “Place Order” button when customerName is missing for delivery + dine_in
+- [ ] Basic validation: ensure order create payload still works (customerName sent when present)
