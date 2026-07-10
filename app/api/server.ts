@@ -22,4 +22,8 @@ async function main() {
   });
 }
 
-await main();
+try {
+  main();
+} catch (err) {
+  console.error("Failed to start server:", err);
+}
