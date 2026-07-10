@@ -22202,9 +22202,13 @@ function getDb() {
         rejectUnauthorized: true
       }
     });
-    instance = (0, import_mysql2.drizzle)(connectionPool);
-    instance.schema = fullSchema;
-    instance.mode = "default";
+    const baseDb = (0, import_mysql2.drizzle)(connectionPool);
+    const customDb = Object.assign(baseDb, {
+      schema: fullSchema,
+      mode: "default",
+      query: baseDb.dialect.createRootQueries(baseDb, fullSchema)
+    });
+    instance = customDb;
   }
   return instance;
 }
