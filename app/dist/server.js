@@ -21474,7 +21474,6 @@ config(en_default());
 
 // api/queries/connection.ts
 var import_mysql2 = require("drizzle-orm/mysql2");
-var import_promise = __toESM(require("mysql2/promise"));
 
 // node_modules/.pnpm/dotenv@17.4.2/node_modules/dotenv/config.js
 (function() {
@@ -22193,22 +22192,13 @@ var activityLogsRelations = (0, import_drizzle_orm.relations)(activityLogs, ({ o
 
 // api/queries/connection.ts
 var fullSchema = { ...schema_exports, ...relations_exports };
-var instance = null;
+var instance;
 function getDb() {
   if (!instance) {
-    const connectionPool = import_promise.default.createPool({
-      uri: env.databaseUrl,
-      ssl: {
-        rejectUnauthorized: true
-      }
+    instance = (0, import_mysql2.drizzle)(env.databaseUrl, {
+      mode: "planetscale",
+      schema: fullSchema
     });
-    const baseDb = (0, import_mysql2.drizzle)(connectionPool);
-    const customDb = Object.assign(baseDb, {
-      schema: fullSchema,
-      mode: "default",
-      query: baseDb.dialect.createRootQueries(baseDb, fullSchema)
-    });
-    instance = customDb;
   }
   return instance;
 }
