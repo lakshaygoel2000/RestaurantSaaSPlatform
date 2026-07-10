@@ -20633,8 +20633,8 @@ var serveStatic = (options = { root: "" }) => {
 };
 
 // api/lib/vite.ts
-var import_fs2 = __toESM(require("fs"), 1);
-var import_path2 = __toESM(require("path"), 1);
+var import_fs2 = __toESM(require("fs"));
+var import_path2 = __toESM(require("path"));
 function serveStaticFiles(app2) {
   const distPath = import_path2.default.resolve(__dirname, "../dist/public");
   app2.use("*", serveStatic({ root: "./dist/public" }));
@@ -47242,6 +47242,9 @@ function drizzle(...params) {
   drizzle2.mock = mock;
 })(drizzle || (drizzle = {}));
 
+// api/queries/connection.ts
+var import_promise = __toESM(require_promise());
+
 // node_modules/.pnpm/dotenv@17.4.2/node_modules/dotenv/config.js
 (function() {
   require_main().config(
@@ -47957,11 +47960,16 @@ var activityLogsRelations = relations(activityLogs, ({ one }) => ({
 
 // api/queries/connection.ts
 var fullSchema = { ...schema_exports, ...relations_exports };
-var instance;
+var instance = null;
 function getDb() {
   if (!instance) {
-    instance = drizzle(env.databaseUrl, {
-      mode: "planetscale",
+    const connectionPool = import_promise.default.createPool({
+      uri: env.databaseUrl,
+      ssl: {
+        rejectUnauthorized: true
+      }
+    });
+    instance = drizzle(connectionPool, {
       schema: fullSchema
     });
   }
