@@ -22202,11 +22202,9 @@ function getDb() {
         rejectUnauthorized: true
       }
     });
-    const config2 = {
-      schema: fullSchema,
-      mode: "default"
-    };
-    instance = (0, import_mysql2.drizzle)(connectionPool, config2);
+    instance = (0, import_mysql2.drizzle)(connectionPool);
+    instance.schema = fullSchema;
+    instance.mode = "default";
   }
   return instance;
 }

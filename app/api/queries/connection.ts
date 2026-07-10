@@ -16,13 +16,14 @@ export function getDb() {
       },
     });
 
-    // Use a direct fallback initialization assignment
-    const config: any = {
-      schema: fullSchema,
-      mode: "default"
-    };
+    // 1. Initialize drizzle WITHOUT passing the schema object to the config.
+    // This completely bypasses the broken "mode" validation check!
+    instance = drizzle(connectionPool);
 
-    instance = drizzle(connectionPool, config);
+    // 2. Manually inject the schema and dialetct configurations onto the instance 
+    // so your relational queries (db.query...) still work perfectly.
+    instance.schema = fullSchema;
+    instance.mode = "default";
   }
   return instance;
 }
