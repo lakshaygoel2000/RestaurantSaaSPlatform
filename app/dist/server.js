@@ -47969,10 +47969,11 @@ function getDb() {
         rejectUnauthorized: true
       }
     });
-    instance = drizzle(connectionPool, {
+    const config2 = {
       schema: fullSchema,
       mode: "default"
-    });
+    };
+    instance = drizzle(connectionPool, config2);
   }
   return instance;
 }

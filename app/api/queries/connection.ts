@@ -5,8 +5,7 @@ import * as schema from "@db/schema";
 import * as relations from "@db/relations";
 
 const fullSchema = { ...schema, ...relations };
-
-let instance: unknown = null;
+let instance: any = null;
 
 export function getDb() {
   if (!instance) {
@@ -17,11 +16,13 @@ export function getDb() {
       },
     });
 
-    // Added mode: "default" to comply with Drizzle's relational query requirements
-    instance = (drizzle as any)(connectionPool, {
+    // Use a direct fallback initialization assignment
+    const config: any = {
       schema: fullSchema,
-      mode: "default", 
-    });
+      mode: "default"
+    };
+
+    instance = drizzle(connectionPool, config);
   }
   return instance;
 }
