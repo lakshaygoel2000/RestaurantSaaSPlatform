@@ -6,7 +6,6 @@ import * as relations from "@db/relations";
 
 const fullSchema = { ...schema, ...relations };
 
-// 1. Using 'unknown' instead of 'any' completely satisfies the no-explicit-any linter rule
 let instance: unknown = null;
 
 export function getDb() {
@@ -18,9 +17,10 @@ export function getDb() {
       },
     });
 
-    // 2. We cast using 'as unknown' to sever the strict type mismatch loop natively
+    // Added mode: "default" to comply with Drizzle's relational query requirements
     instance = (drizzle as any)(connectionPool, {
       schema: fullSchema,
+      mode: "default", 
     });
   }
   return instance;

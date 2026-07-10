@@ -47970,7 +47970,8 @@ function getDb() {
       }
     });
     instance = drizzle(connectionPool, {
-      schema: fullSchema
+      schema: fullSchema,
+      mode: "default"
     });
   }
   return instance;
