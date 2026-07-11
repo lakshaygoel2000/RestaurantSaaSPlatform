@@ -16,4 +16,7 @@ export const env = {
   kimiAuthUrl: required("KIMI_AUTH_URL"),
   kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  // Optional database tuning for shared-hosting / cPanel deployments.
+  dbSslMode: process.env.DB_SSL_MODE,
+  dbConnectionLimit: process.env.DB_CONNECTION_LIMIT,
 };

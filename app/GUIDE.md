@@ -312,7 +312,7 @@ npx cap sync android     # Sync web code to Android project
 cd android && ./gradlew assembleDebug   # Build APK
 
 # Start production server
-npm start                   # Runs node dist/boot.js
+npm start                   # Runs NODE_ENV=production node dist/server.js
 ```
 
 ---
@@ -338,10 +338,10 @@ export APP_SECRET=your-secret
 export PORT=3000
 
 # 3. Start
-node dist/boot.js
+NODE_ENV=production node dist/server.js
 
 # Or with PM2:
-pm2 start dist/boot.js --name restaurantos
+pm2 start dist/server.js --name restaurantos
 ```
 
 ## Building the Android APK
@@ -472,6 +472,23 @@ console.log('OK:', r.length, 'restaurants');
 "
 ```
 
+### Login works on localhost but fails after cPanel deployment
+
+**Cause**: The backend cannot reach the MySQL database, or SSL settings are incompatible with the shared-hosting MySQL server.
+
+**Fix**:
+1. Use the cPanel MySQL hostname (usually `localhost`) and database name:
+   ```env
+   DATABASE_URL=mysql://cpanel_user:password@localhost:3306/cpanel_dbname
+   ```
+2. Disable SSL for cPanel shared hosting:
+   ```env
+   DB_SSL_MODE=disabled
+   ```
+3. Visit `https://your-domain.com/health` to verify the database connection. If it returns `database: connected`, the backend can reach MySQL.
+4. Check the Node.js application logs in cPanel for the exact connection error.
+5. Make sure `node_modules` contains `drizzle-orm` and `mysql2` (they are marked `external` in the build, so they must be installed on the server).
+
 ---
 
 ## Environment Variables Reference
@@ -484,6 +501,8 @@ console.log('OK:', r.length, 'restaurants');
 | `VITE_APP_ID` | Frontend app ID | Yes |
 | `OWNER_UNION_ID` | Admin identifier | Yes |
 | `PORT` | Server port | No (default: 3000) |
+| `DB_SSL_MODE` | `disabled` / `required` / `accept-invalid` | No |
+| `DB_CONNECTION_LIMIT` | MySQL pool size | No (default: 10) |
 
 ---
 

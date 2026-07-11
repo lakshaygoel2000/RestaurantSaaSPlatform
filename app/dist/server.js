@@ -3444,6 +3444,88 @@ var bodyLimit = (options) => {
   };
 };
 
+// node_modules/.pnpm/hono@4.12.28/node_modules/hono/dist/middleware/cors/index.js
+var cors = (options) => {
+  const opts = {
+    origin: "*",
+    allowMethods: ["GET", "HEAD", "PUT", "POST", "DELETE", "PATCH"],
+    allowHeaders: [],
+    exposeHeaders: [],
+    ...options
+  };
+  const findAllowOrigin = ((optsOrigin) => {
+    if (typeof optsOrigin === "string") {
+      if (optsOrigin === "*") {
+        return () => optsOrigin;
+      } else {
+        return (origin) => optsOrigin === origin ? origin : null;
+      }
+    } else if (typeof optsOrigin === "function") {
+      return optsOrigin;
+    } else {
+      return (origin) => optsOrigin.includes(origin) ? origin : null;
+    }
+  })(opts.origin);
+  const findAllowMethods = ((optsAllowMethods) => {
+    if (typeof optsAllowMethods === "function") {
+      return optsAllowMethods;
+    } else if (Array.isArray(optsAllowMethods)) {
+      return () => optsAllowMethods;
+    } else {
+      return () => [];
+    }
+  })(opts.allowMethods);
+  return async function cors2(c, next) {
+    function set2(key, value) {
+      c.res.headers.set(key, value);
+    }
+    const allowOrigin = await findAllowOrigin(c.req.header("origin") || "", c);
+    if (allowOrigin) {
+      set2("Access-Control-Allow-Origin", allowOrigin);
+    }
+    if (opts.credentials) {
+      set2("Access-Control-Allow-Credentials", "true");
+    }
+    if (opts.exposeHeaders?.length) {
+      set2("Access-Control-Expose-Headers", opts.exposeHeaders.join(","));
+    }
+    if (c.req.method === "OPTIONS") {
+      if (opts.origin !== "*") {
+        set2("Vary", "Origin");
+      }
+      if (opts.maxAge != null) {
+        set2("Access-Control-Max-Age", opts.maxAge.toString());
+      }
+      const allowMethods = await findAllowMethods(c.req.header("origin") || "", c);
+      if (allowMethods.length) {
+        set2("Access-Control-Allow-Methods", allowMethods.join(","));
+      }
+      let headers = opts.allowHeaders;
+      if (!headers?.length) {
+        const requestHeaders = c.req.header("Access-Control-Request-Headers");
+        if (requestHeaders) {
+          headers = requestHeaders.split(/\s*,\s*/);
+        }
+      }
+      if (headers?.length) {
+        set2("Access-Control-Allow-Headers", headers.join(","));
+        c.res.headers.append("Vary", "Access-Control-Request-Headers");
+      }
+      c.res.headers.delete("Content-Length");
+      c.res.headers.delete("Content-Type");
+      return new Response(null, {
+        headers: c.res.headers,
+        status: 204,
+        statusText: "No Content"
+      });
+    }
+    await next();
+    if (opts.origin !== "*") {
+      c.header("Vary", "Origin", { append: true });
+    }
+  };
+};
+
 // node_modules/.pnpm/@trpc+server@11.18.0_typescript@5.9.3/node_modules/@trpc/server/dist/codes-DagpWZLc.mjs
 function mergeWithoutOverrides(obj1, ...objs) {
   const newObj = Object.assign(emptyObject(), obj1);
@@ -21501,7 +21583,10 @@ var env = {
   databaseUrl: required2("DATABASE_URL"),
   kimiAuthUrl: required2("KIMI_AUTH_URL"),
   kimiOpenUrl: required2("KIMI_OPEN_URL"),
-  ownerUnionId: process.env.OWNER_UNION_ID ?? ""
+  ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  // Optional database tuning for shared-hosting / cPanel deployments.
+  dbSslMode: process.env.DB_SSL_MODE,
+  dbConnectionLimit: process.env.DB_CONNECTION_LIMIT
 };
 
 // db/schema.ts
@@ -22193,26 +22278,63 @@ var activityLogsRelations = (0, import_drizzle_orm.relations)(activityLogs, ({ o
 var import_promise = __toESM(require("mysql2/promise"));
 var fullSchema = { ...schema_exports, ...relations_exports };
 var instance;
+var poolInstance;
+var connectionTested = false;
+function parseSslOption(value) {
+  if (!value) return void 0;
+  if (value === "true" || value === "1") {
+    return { rejectUnauthorized: false };
+  }
+  if (value === "false" || value === "0") {
+    return void 0;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { rejectUnauthorized: false };
+  }
+}
+function buildPoolConfig() {
+  const url2 = new URL(env.databaseUrl);
+  let ssl = parseSslOption(url2.searchParams.get("ssl"));
+  const sslMode = process.env.DB_SSL_MODE?.toLowerCase();
+  if (sslMode === "disabled" || sslMode === "false" || sslMode === "no") {
+    ssl = void 0;
+  } else if (sslMode === "required") {
+    ssl = { rejectUnauthorized: true };
+  } else if (sslMode === "accept-invalid" || sslMode === "self-signed") {
+    ssl = { rejectUnauthorized: false };
+  }
+  return {
+    host: url2.hostname,
+    // Standard MySQL default is 3306. Only specify a port in the URL when the host requires it.
+    port: url2.port ? Number(url2.port) : 3306,
+    user: url2.username,
+    // Safely decodes special symbols (@, #, $) inside the password.
+    password: decodeURIComponent(url2.password),
+    // Isolates ONLY the dbname by stripping away trailing ?ssl=... parameters.
+    database: url2.pathname.replace(/^\//, "").split("?")[0],
+    ssl,
+    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || "10"),
+    // Keep idle connections alive on shared hosting to reduce handshake churn.
+    enableKeepAlive: true
+  };
+}
+async function testConnection(pool) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.query("SELECT 1");
+  } finally {
+    conn.release();
+  }
+}
 function getDb() {
   if (!instance) {
-    const connectionPool = import_promise.default.createPool({
-      ...(() => {
-        const url2 = new URL(env.databaseUrl);
-        return {
-          host: url2.hostname,
-          // TiDB Cloud defaults to port 4000, fallback to 3306 if omitted
-          port: url2.port ? Number(url2.port) : 4e3,
-          user: url2.username,
-          // Safely decodes any special symbols (@, #, $) inside the password
-          password: decodeURIComponent(url2.password),
-          // CORRECTION 2: Isolates ONLY the 'dbname' by stripping away the trailing ?ssl=... parameters
-          database: url2.pathname.replace(/^\//, "").split("?")[0]
-        };
-      })(),
-      ssl: { rejectUnauthorized: true },
-      // keep-alive reduces churn on shared hosting setups
-      connectionLimit: 10
-    });
+    const config2 = buildPoolConfig();
+    const safeConfig = { ...config2, password: "***" };
+    console.log("[DB] Creating connection pool:", safeConfig);
+    const connectionPool = import_promise.default.createPool(config2);
+    poolInstance = connectionPool;
     const baseDb = (0, import_mysql2.drizzle)(connectionPool);
     const dialect = baseDb.dialect;
     const createRootQueries = dialect?.createRootQueries;
@@ -22226,9 +22348,33 @@ function getDb() {
     } else {
       Object.assign(baseDb, { schema: fullSchema });
     }
+    if (!connectionTested) {
+      connectionTested = true;
+      testConnection(connectionPool).then(() => console.log("[DB] Connection verified")).catch((err) => {
+        console.error("[DB] Connection test failed:", err);
+      });
+    }
     instance = baseDb;
   }
   return instance;
+}
+async function checkDatabaseConnection() {
+  try {
+    getDb();
+    const pool = poolInstance;
+    if (!pool) {
+      return { ok: false, error: "Database pool not initialized" };
+    }
+    const conn = await pool.getConnection();
+    try {
+      await conn.query("SELECT 1");
+      return { ok: true };
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
 }
 
 // api/staff-auth-router.ts
@@ -23611,47 +23757,56 @@ var staffAuthRouter = createRouter({
       password: external_exports.string().min(1, "Password is required")
     })
   ).mutation(async ({ input }) => {
-    const db = getDb();
-    const staffMember = await db.select().from(staff).where((0, import_drizzle_orm2.eq)(staff.username, input.username)).then((rows) => rows[0]);
-    if (!staffMember) {
+    try {
+      const db = getDb();
+      const staffMember = await db.select().from(staff).where((0, import_drizzle_orm2.eq)(staff.username, input.username)).then((rows) => rows[0]);
+      if (!staffMember) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid username or password"
+        });
+      }
+      if (staffMember.status === "inactive") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Account is inactive. Contact your manager."
+        });
+      }
+      if (staffMember.passwordHash !== input.password) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid username or password"
+        });
+      }
+      const restaurant = await db.select().from(restaurants).where((0, import_drizzle_orm2.eq)(restaurants.id, staffMember.restaurantId)).then((rows) => rows[0]);
+      const token = await signSessionToken({
+        unionId: `staff_${staffMember.id}`,
+        clientId: restaurant?.slug || "restaurantos"
+      });
+      await db.update(staff).set({ lastActiveAt: /* @__PURE__ */ new Date() }).where((0, import_drizzle_orm2.eq)(staff.id, staffMember.id));
+      return {
+        token,
+        staff: {
+          id: staffMember.id,
+          name: staffMember.name,
+          role: staffMember.role,
+          restaurantId: staffMember.restaurantId,
+          branchId: staffMember.branchId
+        },
+        restaurant: restaurant ? {
+          id: restaurant.id,
+          name: restaurant.name,
+          slug: restaurant.slug
+        } : null
+      };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      console.error("[auth.login] Unexpected error:", err);
       throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Invalid username or password"
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Login service unavailable. Please try again in a moment."
       });
     }
-    if (staffMember.status === "inactive") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "Account is inactive. Contact your manager."
-      });
-    }
-    if (staffMember.passwordHash !== input.password) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Invalid username or password"
-      });
-    }
-    const restaurant = await db.select().from(restaurants).where((0, import_drizzle_orm2.eq)(restaurants.id, staffMember.restaurantId)).then((rows) => rows[0]);
-    const token = await signSessionToken({
-      unionId: `staff_${staffMember.id}`,
-      clientId: restaurant?.slug || "restaurantos"
-    });
-    await db.update(staff).set({ lastActiveAt: /* @__PURE__ */ new Date() }).where((0, import_drizzle_orm2.eq)(staff.id, staffMember.id));
-    return {
-      token,
-      staff: {
-        id: staffMember.id,
-        name: staffMember.name,
-        role: staffMember.role,
-        restaurantId: staffMember.restaurantId,
-        branchId: staffMember.branchId
-      },
-      restaurant: restaurant ? {
-        id: restaurant.id,
-        name: restaurant.name,
-        slug: restaurant.slug
-      } : null
-    };
   }),
   // Verify staff token and return staff info
   me: publicQuery.query(async ({ ctx }) => {
@@ -24788,17 +24943,47 @@ async function createContext(opts) {
 
 // api/boot.ts
 var app = new Hono2();
+app.use(
+  "*",
+  cors({
+    origin: env.isProduction ? process.env.ALLOWED_ORIGIN ?? "*" : "*",
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  })
+);
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+app.get("/health", async (c) => {
+  const db = await checkDatabaseConnection();
+  if (!db.ok) {
+    return c.json({ status: "error", database: db }, 503);
+  }
+  return c.json({ status: "ok", database: "connected" });
+});
 app.use("/api/trpc/*", async (c) => {
   const endpoint = new URL(c.req.raw.url).pathname;
   return fetchRequestHandler({
     endpoint,
     req: c.req.raw,
     router: appRouter,
-    createContext
+    createContext,
+    onError: (opts) => {
+      const { error: error51, path: path2 } = opts;
+      console.error(`[tRPC error] ${path2}:`, error51);
+    }
   });
 });
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
+app.onError((err, c) => {
+  console.error("[Unhandled error]", err);
+  return c.json(
+    {
+      error: "Internal server error",
+      message: env.isProduction ? "Something went wrong. Please try again later." : err.message
+    },
+    500
+  );
+});
 var boot_default = app;
 
 // api/server.ts
@@ -24810,16 +24995,25 @@ function assertProduction() {
 }
 async function main() {
   assertProduction();
+  console.log("[Server] Verifying database connection...");
+  const dbCheck = await checkDatabaseConnection();
+  if (!dbCheck.ok) {
+    console.error("[Server] Database connection failed:", dbCheck.error);
+    console.error(
+      "[Server] Hint: For cPanel/MySQL, set DATABASE_URL=mysql://user:pass@localhost:3306/dbname and DB_SSL_MODE=disabled"
+    );
+    throw new Error(`Database connection failed: ${dbCheck.error}`);
+  }
+  console.log("[Server] Database connection OK");
   serveStaticFiles(boot_default);
   serve({ fetch: boot_default.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
-try {
-  main();
-} catch (err) {
+main().catch((err) => {
   console.error("Failed to start server:", err);
-}
+  process.exit(1);
+});
 /*! Bundled license information:
 
 @trpc/server/dist/resolveResponse-CdASWfAV.mjs:

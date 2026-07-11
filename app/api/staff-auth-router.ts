@@ -16,69 +16,81 @@ export const staffAuthRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
+      try {
+        const db = getDb();
 
-      const staffMember = await db
-        .select()
-        .from(staff)
-        .where(eq(staff.username, input.username))
-        .then((rows) => rows[0]);
+        const staffMember = await db
+          .select()
+          .from(staff)
+          .where(eq(staff.username, input.username))
+          .then((rows) => rows[0]);
 
-      if (!staffMember) {
+        if (!staffMember) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid username or password",
+          });
+        }
+
+        if (staffMember.status === "inactive") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Account is inactive. Contact your manager.",
+          });
+        }
+
+        if (staffMember.passwordHash !== input.password) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid username or password",
+          });
+        }
+
+        const restaurant = await db
+          .select()
+          .from(restaurants)
+          .where(eq(restaurants.id, staffMember.restaurantId))
+          .then((rows) => rows[0]);
+
+        // Generate JWT with restaurantId embedded
+        const token = await signSessionToken({
+          unionId: `staff_${staffMember.id}`,
+          clientId: restaurant?.slug || "restaurantos",
+        });
+
+        await db
+          .update(staff)
+          .set({ lastActiveAt: new Date() })
+          .where(eq(staff.id, staffMember.id));
+
+        return {
+          token,
+          staff: {
+            id: staffMember.id,
+            name: staffMember.name,
+            role: staffMember.role,
+            restaurantId: staffMember.restaurantId,
+            branchId: staffMember.branchId,
+          },
+          restaurant: restaurant
+            ? {
+                id: restaurant.id,
+                name: restaurant.name,
+                slug: restaurant.slug,
+              }
+            : null,
+        };
+      } catch (err) {
+        // Re-throw known tRPC errors as-is.
+        if (err instanceof TRPCError) throw err;
+
+        // Wrap unexpected DB/connection errors so the client never sees raw SQL.
+        console.error("[auth.login] Unexpected error:", err);
         throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Invalid username or password",
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Login service unavailable. Please try again in a moment.",
         });
       }
-
-      if (staffMember.status === "inactive") {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Account is inactive. Contact your manager.",
-        });
-      }
-
-      if (staffMember.passwordHash !== input.password) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Invalid username or password",
-        });
-      }
-
-      const restaurant = await db
-        .select()
-        .from(restaurants)
-        .where(eq(restaurants.id, staffMember.restaurantId))
-        .then((rows) => rows[0]);
-
-      // Generate JWT with restaurantId embedded
-      const token = await signSessionToken({
-        unionId: `staff_${staffMember.id}`,
-        clientId: restaurant?.slug || "restaurantos",
-      });
-
-      await db
-        .update(staff)
-        .set({ lastActiveAt: new Date() })
-        .where(eq(staff.id, staffMember.id));
-
-      return {
-        token,
-        staff: {
-          id: staffMember.id,
-          name: staffMember.name,
-          role: staffMember.role,
-          restaurantId: staffMember.restaurantId,
-          branchId: staffMember.branchId,
-        },
-        restaurant: restaurant
-          ? {
-              id: restaurant.id,
-              name: restaurant.name,
-              slug: restaurant.slug,
-            }
-          : null,
-      };
     }),
 
   // Verify staff token and return staff info

@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/server.js",
+    "start:prod": "NODE_ENV=production node dist/server.js",
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
