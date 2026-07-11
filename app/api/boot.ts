@@ -10,9 +10,11 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
 // tRPC API handler
-app.use("/api/trpc", async (c) => {
+app.use("/api/trpc/*", async (c) => {
+  const endpoint = new URL(c.req.raw.url).pathname;
+
   return fetchRequestHandler({
-    endpoint: "/api/trpc",
+    endpoint,
     req: c.req.raw,
     router: appRouter,
     createContext,

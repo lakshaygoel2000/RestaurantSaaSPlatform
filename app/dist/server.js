@@ -24789,9 +24789,10 @@ async function createContext(opts) {
 // api/boot.ts
 var app = new Hono2();
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.use("/api/trpc", async (c) => {
+app.use("/api/trpc/*", async (c) => {
+  const endpoint = new URL(c.req.raw.url).pathname;
   return fetchRequestHandler({
-    endpoint: "/api/trpc",
+    endpoint,
     req: c.req.raw,
     router: appRouter,
     createContext
