@@ -26,14 +26,18 @@ app.use(
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
-// Health check used by reverse proxies and uptime monitors.
-app.get("/health", async (c) => {
+async function healthHandler(c: any) {
   const db = await checkDatabaseConnection();
   if (!db.ok) {
     return c.json({ status: "error", database: db }, 503);
   }
   return c.json({ status: "ok", database: "connected" });
-});
+}
+
+// Health check used by reverse proxies and uptime monitors.
+app.get("/health", healthHandler);
+// Some cPanel/Apache proxies only forward /api/* to Node. Provide /api/health too.
+app.get("/api/health", healthHandler);
 
 // tRPC API handler
 app.use("/api/trpc/*", async (c) => {

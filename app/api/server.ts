@@ -12,8 +12,22 @@ function assertProduction() {
   }
 }
 
+function logStartupBanner() {
+  console.log("==============================================");
+  console.log(`[Server] RestaurantOS starting...`);
+  console.log(`[Server] NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`[Server] CWD: ${process.cwd()}`);
+  console.log(`[Server] PORT: ${port}`);
+  console.log(`[Server] DATABASE_URL set: ${env.databaseUrl ? "yes" : "NO"}`);
+  console.log(`[Server] APP_ID set: ${env.appId ? "yes" : "NO"}`);
+  console.log(`[Server] APP_SECRET set: ${env.appSecret ? "yes" : "NO"}`);
+  console.log(`[Server] DB_SSL_MODE: ${process.env.DB_SSL_MODE || "(not set)"}`);
+  console.log("==============================================");
+}
+
 async function main() {
   assertProduction();
+  logStartupBanner();
 
   // Verify the database is reachable before binding the HTTP port.
   // On cPanel/shared hosting this is the #1 cause of login failures.
