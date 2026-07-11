@@ -24789,7 +24789,7 @@ async function createContext(opts) {
 // api/boot.ts
 var app = new Hono2();
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.use("/api/trpc/*", async (c) => {
+app.use("/api/trpc", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
     req: c.req.raw,
