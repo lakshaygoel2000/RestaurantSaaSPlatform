@@ -22191,14 +22191,37 @@ var activityLogsRelations = (0, import_drizzle_orm.relations)(activityLogs, ({ o
 }));
 
 // api/queries/connection.ts
+var import_mysql22 = __toESM(require("mysql2"));
 var fullSchema = { ...schema_exports, ...relations_exports };
 var instance;
 function getDb() {
   if (!instance) {
-    instance = (0, import_mysql2.drizzle)(env.databaseUrl, {
-      mode: "planetscale",
-      schema: fullSchema
+    const connectionPool = import_mysql22.default.createPool(
+      {
+        ...(() => {
+          const url2 = new URL(env.databaseUrl);
+          return {
+            host: url2.hostname,
+            port: url2.port ? Number(url2.port) : 3306,
+            user: url2.username,
+            password: url2.password,
+            database: url2.pathname.replace(/^\//, "")
+          };
+        })(),
+        ssl: { rejectUnauthorized: true },
+        // keep-alive reduces churn on shared hosting.
+        connectionLimit: 10
+      }
+    );
+    const baseDb = (0, import_mysql2.drizzle)(connectionPool);
+    const dialect = baseDb.dialect;
+    const rootQueries = dialect.createRootQueries(baseDb, fullSchema);
+    Object.assign(baseDb, rootQueries);
+    Object.assign(baseDb, {
+      query: rootQueries.query,
+      queries: rootQueries.queries
     });
+    instance = baseDb;
   }
   return instance;
 }
