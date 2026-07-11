@@ -312,7 +312,7 @@ npx cap sync android     # Sync web code to Android project
 cd android && ./gradlew assembleDebug   # Build APK
 
 # Start production server
-npm start                   # Runs NODE_ENV=production node dist/server.js
+npm start                   # Runs NODE_ENV=production node server.js
 ```
 
 ---
@@ -338,10 +338,10 @@ export APP_SECRET=your-secret
 export PORT=3000
 
 # 3. Start
-NODE_ENV=production node dist/server.js
+NODE_ENV=production node server.js
 
 # Or with PM2:
-pm2 start dist/server.js --name restaurantos
+pm2 start server.js --name restaurantos
 ```
 
 ## Building the Android APK
