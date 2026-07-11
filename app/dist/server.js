@@ -22191,14 +22191,43 @@ var activityLogsRelations = (0, import_drizzle_orm.relations)(activityLogs, ({ o
 }));
 
 // api/queries/connection.ts
+var import_promise = __toESM(require("mysql2/promise"));
 var fullSchema = { ...schema_exports, ...relations_exports };
 var instance;
 function getDb() {
   if (!instance) {
-    instance = (0, import_mysql2.drizzle)(env.databaseUrl, {
-      mode: "default",
-      schema: fullSchema
+    const connectionPool = import_promise.default.createPool({
+      ...(() => {
+        const url2 = new URL(env.databaseUrl);
+        return {
+          host: url2.hostname,
+          // TiDB Cloud defaults to port 4000, fallback to 3306 if omitted
+          port: url2.port ? Number(url2.port) : 4e3,
+          user: url2.username,
+          // Safely decodes any special symbols (@, #, $) inside the password
+          password: decodeURIComponent(url2.password),
+          // CORRECTION 2: Isolates ONLY the 'dbname' by stripping away the trailing ?ssl=... parameters
+          database: url2.pathname.replace(/^\//, "").split("?")[0]
+        };
+      })(),
+      ssl: { rejectUnauthorized: true },
+      // keep-alive reduces churn on shared hosting setups
+      connectionLimit: 10
     });
+    const baseDb = (0, import_mysql2.drizzle)(connectionPool);
+    const dialect = baseDb.dialect;
+    const createRootQueries = dialect?.createRootQueries;
+    if (typeof createRootQueries === "function") {
+      const rootQueries = createRootQueries(baseDb, fullSchema);
+      Object.assign(baseDb, rootQueries);
+      Object.assign(baseDb, {
+        query: rootQueries.query,
+        queries: rootQueries.queries
+      });
+    } else {
+      Object.assign(baseDb, { schema: fullSchema });
+    }
+    instance = baseDb;
   }
   return instance;
 }
