@@ -29,10 +29,10 @@ export default function Login() {
     staffLogin.mutate({ username, password });
   };
 
-  const fillDemo = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-  };
+  // const fillDemo = (u: string, p: string) => {
+  //   setUsername(u);
+  //   setPassword(p);
+  // };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -83,27 +83,6 @@ export default function Login() {
               </Button>
             </form>
 
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
-              <p className="text-xs text-slate-500 text-center mb-2">Demo Accounts</p>
-              <div className="grid grid-cols-2 gap-2 text-[10px]">
-                <button onClick={() => fillDemo("rajesh@spicegarden", "rajesh@spicegarden")} className="p-2 rounded bg-slate-50 dark:bg-slate-800 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
-                  <span className="font-medium text-slate-700 dark:text-slate-300 block">Manager</span>
-                  rajesh@spicegarden
-                </button>
-                <button onClick={() => fillDemo("vikram@spicegarden", "vikram@spicegarden")} className="p-2 rounded bg-slate-50 dark:bg-slate-800 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
-                  <span className="font-medium text-slate-700 dark:text-slate-300 block">Waiter</span>
-                  vikram@spicegarden
-                </button>
-                <button onClick={() => fillDemo("amit@spicegarden", "amit@spicegarden")} className="p-2 rounded bg-slate-50 dark:bg-slate-800 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
-                  <span className="font-medium text-slate-700 dark:text-slate-300 block">Chef</span>
-                  amit@spicegarden
-                </button>
-                <button onClick={() => fillDemo("priya@spicegarden", "priya@spicegarden")} className="p-2 rounded bg-slate-50 dark:bg-slate-800 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
-                  <span className="font-medium text-slate-700 dark:text-slate-300 block">Cashier</span>
-                  priya@spicegarden
-                </button>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

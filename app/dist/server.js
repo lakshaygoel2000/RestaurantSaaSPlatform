@@ -21568,7 +21568,6 @@ var restaurants = (0, import_mysql_core.mysqlTable)(
     updatedAt: (0, import_mysql_core.timestamp)("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    slugIdx: (0, import_mysql_core.uniqueIndex)("slug_idx").on(table.slug),
     statusIdx: (0, import_mysql_core.index)("status_idx").on(table.status),
     planIdx: (0, import_mysql_core.index)("plan_idx").on(table.subscriptionPlan)
   })

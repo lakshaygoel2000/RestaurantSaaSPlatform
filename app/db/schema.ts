@@ -103,7 +103,6 @@ export const restaurants = mysqlTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
-    slugIdx: uniqueIndex("slug_idx").on(table.slug),
     statusIdx: index("status_idx").on(table.status),
     planIdx: index("plan_idx").on(table.subscriptionPlan),
   })

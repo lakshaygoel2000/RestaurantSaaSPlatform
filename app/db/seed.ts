@@ -129,14 +129,18 @@ async function seed() {
   console.log("Seeding 5 restaurants...\n");
 
   for (const r of RESTAURANTS) {
-    const existingRestaurant = await db.query.restaurants.findFirst({
-  where: eq(restaurants.slug, r.slug),
-  });
+    // Avoid relying on `db.query.*` (may be unavailable depending on Drizzle runtime helpers)
+    const existingRestaurant = await db
+      .select()
+      .from(restaurants)
+      .where(eq(restaurants.slug, r.slug))
+      .limit(1)
+      .then((rows: any[]) => rows.at(0));
 
-  if (existingRestaurant) {
-    console.log(`Restaurant '${r.slug}' already exists. Skipping...`);
-    continue;
-  }
+    if (existingRestaurant) {
+      console.log(`Restaurant '${r.slug}' already exists. Skipping...`);
+      continue;
+    }
     console.log(`\n--- Creating: ${r.name} ---`);
 
     // Create restaurant
@@ -440,13 +444,19 @@ async function seed() {
   console.log("\n=== Seeding complete for 5 restaurants! ===");
   console.log("\nDemo login credentials for each restaurant:");
   for (const r of RESTAURANTS) {
-  const existingRestaurant = await db.query.restaurants.findFirst({
-  where: eq(restaurants.slug, r.slug),});
+    // Avoid relying on `db.query.*` (may be unavailable depending on Drizzle runtime helpers)
+    const existingRestaurant = await db
+      .select()
+      .from(restaurants)
+      .where(eq(restaurants.slug, r.slug))
+      .limit(1)
+      .then((rows: any[]) => rows.at(0));
 
-  if (existingRestaurant) {
-    console.log(`Restaurant '${r.slug}' already exists. Skipping...`);
-    continue;
-  }
+    if (existingRestaurant) {
+      console.log(`Restaurant '${r.slug}' already exists. Skipping...`);
+      continue;
+    }
+
     console.log(`  ${r.name} (${r.slug}):`);
     console.log(`    manager@${r.slug} / manager@${r.slug} (Manager)`);
     console.log(`    cashier@${r.slug} / cashier@${r.slug} (Cashier)`);
