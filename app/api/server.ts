@@ -38,9 +38,11 @@ async function main() {
     console.error(
       "[Server] Hint: For cPanel/MySQL, set DATABASE_URL=mysql://user:pass@localhost:3306/dbname and DB_SSL_MODE=disabled"
     );
-    throw new Error(`Database connection failed: ${dbCheck.error}`);
+    // Don't exit: keep the server running so /api/health can report the error
+    // and the frontend files can still be served for diagnostics.
+  } else {
+    console.log("[Server] Database connection OK");
   }
-  console.log("[Server] Database connection OK");
 
   serveStaticFiles(app);
   serve({ fetch: app.fetch, port }, () => {

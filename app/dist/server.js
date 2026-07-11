@@ -1034,240 +1034,73 @@ var serve = (options, listeningListener) => {
   return server;
 };
 
-// node_modules/.pnpm/hono@4.12.28/node_modules/hono/dist/utils/mime.js
-var getMimeType = (filename, mimes = baseMimes) => {
-  const regexp = /\.([a-zA-Z0-9]+?)$/;
-  const match2 = filename.match(regexp);
-  if (!match2) {
-    return;
-  }
-  return mimes[match2[1].toLowerCase()];
-};
-var _baseMimes = {
-  aac: "audio/aac",
-  avi: "video/x-msvideo",
-  avif: "image/avif",
-  av1: "video/av1",
-  bin: "application/octet-stream",
-  bmp: "image/bmp",
-  css: "text/css; charset=utf-8",
-  csv: "text/csv; charset=utf-8",
-  eot: "application/vnd.ms-fontobject",
-  epub: "application/epub+zip",
-  gif: "image/gif",
-  gz: "application/gzip",
-  htm: "text/html; charset=utf-8",
-  html: "text/html; charset=utf-8",
-  ico: "image/x-icon",
-  ics: "text/calendar; charset=utf-8",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  js: "text/javascript; charset=utf-8",
-  json: "application/json",
-  jsonld: "application/ld+json",
-  map: "application/json",
-  mid: "audio/x-midi",
-  midi: "audio/x-midi",
-  mjs: "text/javascript; charset=utf-8",
-  mp3: "audio/mpeg",
-  mp4: "video/mp4",
-  mpeg: "video/mpeg",
-  oga: "audio/ogg",
-  ogv: "video/ogg",
-  ogx: "application/ogg",
-  opus: "audio/opus",
-  otf: "font/otf",
-  pdf: "application/pdf",
-  png: "image/png",
-  rtf: "application/rtf",
-  svg: "image/svg+xml; charset=utf-8",
-  tif: "image/tiff",
-  tiff: "image/tiff",
-  ts: "video/mp2t",
-  ttf: "font/ttf",
-  txt: "text/plain; charset=utf-8",
-  wasm: "application/wasm",
-  webm: "video/webm",
-  weba: "audio/webm",
-  webmanifest: "application/manifest+json",
-  webp: "image/webp",
-  woff: "font/woff",
-  woff2: "font/woff2",
-  xhtml: "application/xhtml+xml; charset=utf-8",
-  xml: "application/xml; charset=utf-8",
-  zip: "application/zip",
-  "3gp": "video/3gpp",
-  "3g2": "video/3gpp2",
-  gltf: "model/gltf+json",
-  glb: "model/gltf-binary"
-};
-var baseMimes = _baseMimes;
-
-// node_modules/.pnpm/@hono+node-server@1.19.14_hono@4.12.28/node_modules/@hono/node-server/dist/serve-static.mjs
-var import_fs = require("fs");
-var import_path = require("path");
-var import_process = require("process");
-var import_stream2 = require("stream");
-var COMPRESSIBLE_CONTENT_TYPE_REGEX = /^\s*(?:text\/[^;\s]+|application\/(?:javascript|json|xml|xml-dtd|ecmascript|dart|postscript|rtf|tar|toml|vnd\.dart|vnd\.ms-fontobject|vnd\.ms-opentype|wasm|x-httpd-php|x-javascript|x-ns-proxy-autoconfig|x-sh|x-tar|x-virtualbox-hdd|x-virtualbox-ova|x-virtualbox-ovf|x-virtualbox-vbox|x-virtualbox-vdi|x-virtualbox-vhd|x-virtualbox-vmdk|x-www-form-urlencoded)|font\/(?:otf|ttf)|image\/(?:bmp|vnd\.adobe\.photoshop|vnd\.microsoft\.icon|vnd\.ms-dds|x-icon|x-ms-bmp)|message\/rfc822|model\/gltf-binary|x-shader\/x-fragment|x-shader\/x-vertex|[^;\s]+?\+(?:json|text|xml|yaml))(?:[;\s]|$)/i;
-var ENCODINGS = {
-  br: ".br",
-  zstd: ".zst",
-  gzip: ".gz"
-};
-var ENCODINGS_ORDERED_KEYS = Object.keys(ENCODINGS);
-var pr54206Applied = () => {
-  const [major, minor] = import_process.versions.node.split(".").map((component) => parseInt(component));
-  return major >= 23 || major === 22 && minor >= 7 || major === 20 && minor >= 18;
-};
-var useReadableToWeb = pr54206Applied();
-var createStreamBody = (stream) => {
-  if (useReadableToWeb) {
-    return import_stream2.Readable.toWeb(stream);
-  }
-  const body = new ReadableStream({
-    start(controller) {
-      stream.on("data", (chunk) => {
-        controller.enqueue(chunk);
-      });
-      stream.on("error", (err) => {
-        controller.error(err);
-      });
-      stream.on("end", () => {
-        controller.close();
-      });
-    },
-    cancel() {
-      stream.destroy();
-    }
-  });
-  return body;
-};
-var getStats = (path2) => {
-  let stats;
-  try {
-    stats = (0, import_fs.statSync)(path2);
-  } catch {
-  }
-  return stats;
-};
-var tryDecode = (str, decoder2) => {
-  try {
-    return decoder2(str);
-  } catch {
-    return str.replace(/(?:%[0-9A-Fa-f]{2})+/g, (match2) => {
-      try {
-        return decoder2(match2);
-      } catch {
-        return match2;
-      }
-    });
-  }
-};
-var tryDecodeURI = (str) => tryDecode(str, decodeURI);
-var serveStatic = (options = { root: "" }) => {
-  const root = options.root || "";
-  const optionPath = options.path;
-  if (root !== "" && !(0, import_fs.existsSync)(root)) {
-    console.error(`serveStatic: root path '${root}' is not found, are you sure it's correct?`);
-  }
-  return async (c, next) => {
-    if (c.finalized) {
-      return next();
-    }
-    let filename;
-    if (optionPath) {
-      filename = optionPath;
-    } else {
-      try {
-        filename = tryDecodeURI(c.req.path);
-        if (/(?:^|[\/\\])\.{1,2}(?:$|[\/\\])|[\/\\]{2,}/.test(filename)) {
-          throw new Error();
-        }
-      } catch {
-        await options.onNotFound?.(c.req.path, c);
-        return next();
-      }
-    }
-    let path2 = (0, import_path.join)(
-      root,
-      !optionPath && options.rewriteRequestPath ? options.rewriteRequestPath(filename, c) : filename
-    );
-    let stats = getStats(path2);
-    if (stats && stats.isDirectory()) {
-      const indexFile = options.index ?? "index.html";
-      path2 = (0, import_path.join)(path2, indexFile);
-      stats = getStats(path2);
-    }
-    if (!stats) {
-      await options.onNotFound?.(path2, c);
-      return next();
-    }
-    const mimeType = getMimeType(path2);
-    c.header("Content-Type", mimeType || "application/octet-stream");
-    if (options.precompressed && (!mimeType || COMPRESSIBLE_CONTENT_TYPE_REGEX.test(mimeType))) {
-      const acceptEncodingSet = new Set(
-        c.req.header("Accept-Encoding")?.split(",").map((encoding) => encoding.trim())
-      );
-      for (const encoding of ENCODINGS_ORDERED_KEYS) {
-        if (!acceptEncodingSet.has(encoding)) {
-          continue;
-        }
-        const precompressedStats = getStats(path2 + ENCODINGS[encoding]);
-        if (precompressedStats) {
-          c.header("Content-Encoding", encoding);
-          c.header("Vary", "Accept-Encoding", { append: true });
-          stats = precompressedStats;
-          path2 = path2 + ENCODINGS[encoding];
-          break;
-        }
-      }
-    }
-    let result;
-    const size = stats.size;
-    const range = c.req.header("range") || "";
-    if (c.req.method == "HEAD" || c.req.method == "OPTIONS") {
-      c.header("Content-Length", size.toString());
-      c.status(200);
-      result = c.body(null);
-    } else if (!range) {
-      c.header("Content-Length", size.toString());
-      result = c.body(createStreamBody((0, import_fs.createReadStream)(path2)), 200);
-    } else {
-      c.header("Accept-Ranges", "bytes");
-      c.header("Date", stats.birthtime.toUTCString());
-      const parts = range.replace(/bytes=/, "").split("-", 2);
-      const start = parseInt(parts[0], 10) || 0;
-      let end = parseInt(parts[1], 10) || size - 1;
-      if (size < end - start + 1) {
-        end = size - 1;
-      }
-      const chunksize = end - start + 1;
-      const stream = (0, import_fs.createReadStream)(path2, { start, end });
-      c.header("Content-Length", chunksize.toString());
-      c.header("Content-Range", `bytes ${start}-${end}/${stats.size}`);
-      result = c.body(createStreamBody(stream), 206);
-    }
-    await options.onFound?.(path2, c);
-    return result;
-  };
-};
-
 // api/lib/vite.ts
-var import_fs2 = __toESM(require("fs"));
-var import_path2 = __toESM(require("path"));
+var import_fs = __toESM(require("fs"));
+var import_path = __toESM(require("path"));
 function serveStaticFiles(app2) {
-  const distPath = import_path2.default.resolve(__dirname, "../dist/public");
-  app2.use("*", serveStatic({ root: "./dist/public" }));
+  const distPath = import_path.default.resolve(__dirname, "../dist/public");
+  if (!import_fs.default.existsSync(distPath)) {
+    console.warn(`[Static] dist/public not found at ${distPath}. Frontend will not be served.`);
+  }
+  app2.use("*", async (c, next) => {
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      return next();
+    }
+    const urlPath = new URL(c.req.url).pathname;
+    if (urlPath.startsWith("/api/") || urlPath === "/api") {
+      return next();
+    }
+    const filePath = import_path.default.join(distPath, decodeURIComponent(urlPath));
+    if (!filePath.startsWith(distPath + import_path.default.sep) && filePath !== distPath) {
+      return next();
+    }
+    try {
+      const stat = await import_fs.default.promises.stat(filePath);
+      if (stat.isFile()) {
+        const ext = import_path.default.extname(filePath).toLowerCase();
+        const contentType = mimeTypes[ext] || "application/octet-stream";
+        c.header("Content-Type", contentType);
+        return c.body(import_fs.default.createReadStream(filePath));
+      }
+    } catch {
+    }
+    return next();
+  });
   app2.notFound((c) => {
     const accept = c.req.header("accept") ?? "";
     if (!accept.includes("text/html")) {
       return c.json({ error: "Not Found" }, 404);
     }
-    const indexPath = import_path2.default.resolve(distPath, "index.html");
-    const content = import_fs2.default.readFileSync(indexPath, "utf-8");
+    const indexPath = import_path.default.resolve(distPath, "index.html");
+    if (!import_fs.default.existsSync(indexPath)) {
+      return c.json(
+        { error: "Frontend not built", path: distPath },
+        500
+      );
+    }
+    const content = import_fs.default.readFileSync(indexPath, "utf-8");
     return c.html(content);
   });
 }
+var mimeTypes = {
+  ".html": "text/html",
+  ".js": "application/javascript",
+  ".mjs": "application/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".eot": "application/vnd.ms-fontobject",
+  ".otf": "font/otf",
+  ".webp": "image/webp"
+};
 
 // node_modules/.pnpm/hono@4.12.28/node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -1493,7 +1326,7 @@ var getPattern = (label, next) => {
   }
   return null;
 };
-var tryDecode2 = (str, decoder2) => {
+var tryDecode = (str, decoder2) => {
   try {
     return decoder2(str);
   } catch {
@@ -1506,7 +1339,7 @@ var tryDecode2 = (str, decoder2) => {
     });
   }
 };
-var tryDecodeURI2 = (str) => tryDecode2(str, decodeURI);
+var tryDecodeURI = (str) => tryDecode(str, decodeURI);
 var getPath = (request) => {
   const url2 = request.url;
   const start = url2.indexOf("/", url2.indexOf(":") + 4);
@@ -1518,7 +1351,7 @@ var getPath = (request) => {
       const hashIndex = url2.indexOf("#", i);
       const end = queryIndex === -1 ? hashIndex === -1 ? void 0 : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
       const path2 = url2.slice(start, end);
-      return tryDecodeURI2(path2.includes("%25") ? path2.replace(/%25/g, "%2525") : path2);
+      return tryDecodeURI(path2.includes("%25") ? path2.replace(/%25/g, "%2525") : path2);
     } else if (charCode === 63 || charCode === 35) {
       break;
     }
@@ -1569,7 +1402,7 @@ var _decodeURI = (value) => {
   if (value.indexOf("+") !== -1) {
     value = value.replace(/\+/g, " ");
   }
-  return value.indexOf("%") !== -1 ? tryDecode2(value, decodeURIComponent_) : value;
+  return value.indexOf("%") !== -1 ? tryDecode(value, decodeURIComponent_) : value;
 };
 var _getQueryParam = (url2, key, multiple) => {
   let encoded;
@@ -1645,7 +1478,7 @@ var getQueryParams = (url2, key) => {
 var decodeURIComponent_ = decodeURIComponent;
 
 // node_modules/.pnpm/hono@4.12.28/node_modules/hono/dist/request.js
-var tryDecodeURIComponent = (str) => tryDecode2(str, decodeURIComponent_);
+var tryDecodeURIComponent = (str) => tryDecode(str, decodeURIComponent_);
 var HonoRequest = class {
   /**
    * `.raw` can get the raw Request object.
@@ -25017,9 +24850,9 @@ async function main() {
     console.error(
       "[Server] Hint: For cPanel/MySQL, set DATABASE_URL=mysql://user:pass@localhost:3306/dbname and DB_SSL_MODE=disabled"
     );
-    throw new Error(`Database connection failed: ${dbCheck.error}`);
+  } else {
+    console.log("[Server] Database connection OK");
   }
-  console.log("[Server] Database connection OK");
   serveStaticFiles(boot_default);
   serve({ fetch: boot_default.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
