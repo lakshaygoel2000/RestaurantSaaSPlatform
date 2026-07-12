@@ -333,7 +333,7 @@ pnpm run build
 export DATABASE_URL=your-db-url
 export APP_ID=your-app-id
 export APP_SECRET=your-secret
-export PORT=3000
+# export PORT=3000
 
 # 3. Start
 NODE_ENV=production node server.js
