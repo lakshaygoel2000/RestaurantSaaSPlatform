@@ -25,6 +25,8 @@ node_modules
 .env
 .env.local
 .env.*.local
+.env.example
+.env.setup
 # Database
 *.db
 *.sqlite
