@@ -27083,7 +27083,7 @@ app.onError((err, c) => {
 var boot_default = app;
 
 // api/server.ts
-var port = parseInt(process.env.PORT || "3000");
+var port = parseInt(process.env.PORT || "8080");
 function assertProduction() {
   if (!env.isProduction) {
     throw new Error("Refusing to start server: NODE_ENV is not production");

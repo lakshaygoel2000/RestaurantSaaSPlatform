@@ -93,15 +93,16 @@ npm install
 
 ### Step 2: Configure Environment
 
-The `.env` file is pre-configured with the TiDB Cloud database:
+Create a `.env` file with your own values:
 
 ```env
-DATABASE_URL=mysql://Hsqd8mVoct8R59t.root:nPAI3V3ayqjpIdur@gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/Restaurant_Platform?ssl={"rejectUnauthorized":true}
-APP_ID=19f11fe0-7372-819a-8000-00004245aaec
-APP_SECRET=vkelQyu5cn7jcTS2pWeeemNOsoyBSQrP
+DATABASE_URL=mysql://your-user:your-password@your-host:your-port/your-database
+APP_ID=your-app-id
+APP_SECRET=your-app-secret-min-32-chars
+PORT=8080
 ```
 
-To use your own database, replace `DATABASE_URL`.
+Replace `DATABASE_URL` with your MySQL/TiDB connection string.
 
 ### Step 3: Push Database Schema
 
@@ -134,7 +135,7 @@ This creates 5 complete restaurants with staff, menu items, tables, inventory, c
 npm run dev
 ```
 
-Open **http://localhost:3000**
+Open **http://localhost:8080**
 
 Login with any demo credentials from the table above.
 
@@ -295,7 +296,7 @@ activity       → tenantQuery    → create, list
 
 ```bash
 # Development
-npm run dev                 # Start dev server (http://localhost:3000)
+npm run dev                 # Start dev server (http://localhost:8080)
 
 # Build
 npm run build               # Build for production
@@ -333,7 +334,7 @@ pnpm run build
 export DATABASE_URL=your-db-url
 export APP_ID=your-app-id
 export APP_SECRET=your-secret
-export PORT=3000
+export PORT=your-port
 
 # 3. Start
 NODE_ENV=production node server.js
@@ -387,7 +388,7 @@ The APK needs to know where your backend server is. Edit `.env`:
 # For local testing (PC and phone on same WiFi):
 # Find your PC's IP: ipconfig (Windows) or ifconfig (Mac/Linux)
 # Then add this line to .env:
-VITE_API_URL=http://192.168.1.xxx:3000
+VITE_API_URL=http://192.168.1.xxx:8080
 
 # For production (your deployed backend):
 VITE_API_URL=https://your-domain.com
@@ -415,7 +416,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://localhost:3000/api/;
+        proxy_pass http://localhost:8080/api/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -498,7 +499,7 @@ console.log('OK:', r.length, 'restaurants');
 | `APP_SECRET` | JWT signing secret | Yes |
 | `VITE_APP_ID` | Frontend app ID | Yes |
 | `OWNER_UNION_ID` | Admin identifier | Yes |
-| `PORT` | Server port | No (default: 3000) |
+| `PORT` | Server port | No (default: 8080) |
 | `DB_SSL_MODE` | `disabled` / `required` / `accept-invalid` | No |
 | `DB_CONNECTION_LIMIT` | MySQL pool size | No (default: 10) |
 

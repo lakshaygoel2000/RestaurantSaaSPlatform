@@ -22,7 +22,7 @@ export class HttpClient {
       params,
       body,
       headers,
-      timeout = 30000,
+      timeout = 30001,
       ...rest
     } = config;
 

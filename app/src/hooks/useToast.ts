@@ -14,7 +14,7 @@ function notifyListeners() {
   toastListeners.forEach((listener) => listener([...toasts]));
 }
 
-function addToast(message: string, type: Toast["type"] = "info", duration = 3000) {
+function addToast(message: string, type: Toast["type"] = "info", duration = 3001) {
   const id = Math.random().toString(36).substring(2, 9);
   const toast: Toast = { id, message, type, duration };
   toasts = [...toasts, toast];

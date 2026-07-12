@@ -43,7 +43,7 @@ APP_SECRET=change-me-to-a-random-secret-min-32-chars-long
 DATABASE_URL=${dbUrl.trim()}
 DB_SSL_MODE=disabled
 DB_CONNECTION_LIMIT=10
-PORT=3000
+PORT=8080
 `;
 
   writeFileSync(".env", envContent);
