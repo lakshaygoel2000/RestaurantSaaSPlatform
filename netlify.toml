@@ -1,0 +1,9 @@
+[build]
+  command = "cd app && npm install && npm run build"
+  publish = "app/dist"
+
+# Redirects all API traffic from the browser to your Hono/tRPC serverless backend
+[[redirects]]
+  from = "/api/*"
+  status = 200
+  force = true
