@@ -10731,6 +10731,10 @@ function buildPoolConfig() {
   } else if (sslMode === "accept-invalid" || sslMode === "self-signed") {
     ssl = { rejectUnauthorized: false };
   }
+  const looksLikeTidbCloud = /tidbcloud/i.test(url2.hostname);
+  if (!ssl && looksLikeTidbCloud && (!sslMode || sslMode === "accept-invalid" || sslMode === "self-signed")) {
+    ssl = { rejectUnauthorized: false };
+  }
   return {
     host: url2.hostname,
     // Standard MySQL default is 3306. Only specify a port in the URL when the host requires it.
