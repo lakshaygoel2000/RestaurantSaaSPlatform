@@ -4,9 +4,11 @@ import { Link } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import {
   IndianRupee, ShoppingCart, Clock, ChefHat, Users,
   UtensilsCrossed, TrendingUp, Store, ClipboardList, Receipt, Grid3X3,
+  Package, AlertTriangle,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -19,10 +21,19 @@ export default function Dashboard() {
   const { data: restaurant } = trpc.restaurant.getCurrent.useQuery();
 
   const isManager = user?.role === "manager" || user?.role === "owner" || user?.role === "admin";
+  const isOwner = user?.role === "owner";
+  const subscriptionPlan = restaurant?.subscriptionPlan || "basic";
 
   const trialDaysLeft = restaurant?.trialEndsAt
     ? Math.max(0, Math.ceil((new Date(restaurant.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null;
+
+  const subscriptionDaysLeft = restaurant?.subscriptionExpiresAt
+    ? Math.max(0, Math.ceil((new Date(restaurant.subscriptionExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+
+  const isTrialExpired = restaurant?.status === "trial" && trialDaysLeft === 0;
+  const isSubscriptionExpiringSoon = restaurant?.status === "active" && subscriptionDaysLeft !== null && subscriptionDaysLeft <= 7;
 
   const stats = [
     { title: "Today's Revenue", value: kpis ? `Rs. ${kpis.revenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "Rs. 0.00", icon: IndianRupee, color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" },
@@ -40,10 +51,40 @@ export default function Dashboard() {
     { label: "View KDS", href: "/kitchen", icon: ChefHat, color: "bg-orange-500", show: true },
     { label: "Generate Bill", href: "/billing", icon: Receipt, color: "bg-cyan-500", show: true },
     { label: "Add Staff", href: "/staff", icon: Users, color: "bg-pink-500", show: isManager },
+    { label: "Inventory", href: "/inventory", icon: Package, color: "bg-amber-500", show: isManager && ["standard", "premium"].includes(subscriptionPlan) },
   ];
 
   return (
     <div className="space-y-6">
+      {(isTrialExpired || isSubscriptionExpiringSoon || restaurant?.status === "pending") && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                {restaurant?.status === "pending"
+                  ? "Account pending activation"
+                  : isTrialExpired
+                  ? "Your trial has expired"
+                  : "Subscription expiring soon"}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                {restaurant?.status === "pending"
+                  ? "Activate your account to continue using all features."
+                  : isTrialExpired
+                  ? "Renew your subscription to keep your restaurant running without interruption."
+                  : `Your subscription expires in ${subscriptionDaysLeft} day${subscriptionDaysLeft === 1 ? "" : "s"}. Renew now to avoid service disruption.`}
+              </p>
+            </div>
+          </div>
+          {isOwner && (
+            <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0">
+              <Link to="/subscription">View Subscription</Link>
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">Dashboard Overview</h2>
@@ -62,6 +103,7 @@ export default function Dashboard() {
           {restaurant?.status === "active" && (
             <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white">
               {restaurant.subscriptionPlan?.charAt(0).toUpperCase()}{restaurant.subscriptionPlan?.slice(1)} Plan
+              {subscriptionDaysLeft != null && ` - ${subscriptionDaysLeft} day${subscriptionDaysLeft === 1 ? "" : "s"} left`}
             </Badge>
           )}
         </div>

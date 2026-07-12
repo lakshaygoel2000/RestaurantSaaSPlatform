@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  users,
   restaurants,
   branches,
   staff,
@@ -17,9 +18,20 @@ import {
 } from "./schema";
 
 // ─────────────────────────────────────────────
+// USER RELATIONS
+// ─────────────────────────────────────────────
+export const usersRelations = relations(users, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [users.restaurantId],
+    references: [restaurants.id],
+  }),
+}));
+
+// ─────────────────────────────────────────────
 // RESTAURANT RELATIONS
 // ─────────────────────────────────────────────
 export const restaurantsRelations = relations(restaurants, ({ many }) => ({
+  users: many(users),
   branches: many(branches),
   staff: many(staff),
   categories: many(categories),

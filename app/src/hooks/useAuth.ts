@@ -1,5 +1,10 @@
 import { trpc } from "@/providers/trpc";
 import { useCallback, useMemo } from "react";
+import {
+  LayoutDashboard, UtensilsCrossed, Grid3X3, ClipboardList, ChefHat,
+  Receipt, Users, Package, BarChart3, Settings, UserCircle, ReceiptText,
+  Activity,
+} from "lucide-react";
 
 export type StaffUser = {
   id: number;
@@ -15,53 +20,65 @@ export type StaffUser = {
   restaurantName: string | undefined;
   restaurantSlug: string | undefined;
   username: string | null;
+  subscriptionPlan: string | undefined;
+  subscriptionStatus: string | undefined;
+  trialEndsAt: Date | null;
+  subscriptionExpiresAt: Date | null;
 };
 
 const ALL_NAV = [
-  { name: "Dashboard", path: "/", icon: "LayoutDashboard", roles: ["manager", "owner", "admin", "accountant"] },
-  { name: "Menu", path: "/menu", icon: "UtensilsCrossed", roles: ["manager", "owner", "admin", "waiter", "chef", "cashier"] },
-  { name: "Tables", path: "/tables", icon: "Grid3X3", roles: ["manager", "owner", "admin", "waiter", "cashier"] },
-  { name: "Orders", path: "/orders", icon: "ClipboardList", roles: ["manager", "owner", "admin", "waiter", "chef", "cashier", "delivery_staff"] },
-  { name: "Kitchen", path: "/kitchen", icon: "ChefHat", roles: ["manager", "owner", "admin", "chef"] },
-  { name: "Billing", path: "/billing", icon: "Receipt", roles: ["manager", "owner", "admin", "cashier", "waiter"] },
-  { name: "Customers", path: "/customers", icon: "UserCircle", roles: ["manager", "owner", "admin", "cashier"] },
-  { name: "Staff", path: "/staff", icon: "Users", roles: ["manager", "owner", "admin"] },
-  { name: "Inventory", path: "/inventory", icon: "Package", roles: ["manager", "owner", "admin", "chef"] },
-  { name: "Expenses", path: "/expenses", icon: "ReceiptText", roles: ["manager", "owner", "admin", "accountant"] },
-  { name: "Reports", path: "/reports", icon: "BarChart3", roles: ["manager", "owner", "admin", "accountant"] },
-  { name: "Activity", path: "/activity", icon: "Activity", roles: ["manager", "owner", "admin"] },
-  { name: "Settings", path: "/settings", icon: "Settings", roles: ["manager", "owner", "admin"] },
+  { name: "Dashboard", path: "/", icon: LayoutDashboard, roles: ["manager", "owner", "admin", "accountant"] },
+  { name: "Menu", path: "/menu", icon: UtensilsCrossed, roles: ["manager", "owner", "admin", "waiter", "chef", "cashier"] },
+  { name: "Tables", path: "/tables", icon: Grid3X3, roles: ["manager", "owner", "admin", "waiter", "cashier"] },
+  { name: "Orders", path: "/orders", icon: ClipboardList, roles: ["manager", "owner", "admin", "waiter", "chef", "cashier", "delivery_staff"] },
+  { name: "Kitchen", path: "/kitchen", icon: ChefHat, roles: ["manager", "owner", "admin", "chef"] },
+  { name: "Billing", path: "/billing", icon: Receipt, roles: ["manager", "owner", "admin", "cashier", "waiter"] },
+  { name: "Customers", path: "/customers", icon: UserCircle, roles: ["manager", "owner", "admin", "cashier"] },
+  { name: "Staff", path: "/staff", icon: Users, roles: ["manager", "owner", "admin"] },
+  { name: "Inventory", path: "/inventory", icon: Package, roles: ["manager", "owner", "admin", "chef"], plans: ["standard", "premium"] },
+  { name: "Expenses", path: "/expenses", icon: ReceiptText, roles: ["manager", "owner", "admin", "accountant"] },
+  { name: "Reports", path: "/reports", icon: BarChart3, roles: ["manager", "owner", "admin", "accountant"] },
+  { name: "Activity", path: "/activity", icon: Activity, roles: ["manager", "owner", "admin"] },
+  { name: "Settings", path: "/settings", icon: Settings, roles: ["manager", "owner", "admin"] },
 ];
 
 export function useAuth() {
   const utils = trpc.useUtils();
 
-  const { data: user, isLoading } = trpc.auth.me.useQuery(undefined, {
+  const { data: user, isLoading } = trpc.staffAuth.me.useQuery(undefined, {
     staleTime: 1000 * 60 * 5,
     retry: false,
   });
 
-  const logoutMutation = trpc.auth.logout.useMutation({
+  const logoutMutation = trpc.staffAuth.logout.useMutation({
     onSuccess: () => {
       localStorage.removeItem("staff_token");
+      localStorage.removeItem("owner_token");
       utils.invalidate();
       window.location.href = "/login";
     },
     onError: () => {
       localStorage.removeItem("staff_token");
+      localStorage.removeItem("owner_token");
       window.location.href = "/login";
     },
   });
 
   const logout = useCallback(() => {
     localStorage.removeItem("staff_token");
+    localStorage.removeItem("owner_token");
     logoutMutation.mutate();
   }, [logoutMutation]);
 
   const navItems = useMemo(() => {
     if (!user) return [];
     const role = user.role as string;
-    return ALL_NAV.filter((item) => item.roles.includes(role));
+    const plan = user.subscriptionPlan as string | undefined;
+    return ALL_NAV.filter((item) => {
+      const roleMatch = item.roles.includes(role);
+      const planMatch = !item.plans || (plan && item.plans.includes(plan));
+      return roleMatch && planMatch;
+    });
   }, [user]);
 
   const isManager = user?.role === "manager" || user?.role === "owner" || user?.role === "admin";

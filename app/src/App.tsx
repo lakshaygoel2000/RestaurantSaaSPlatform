@@ -1,6 +1,9 @@
 import { Routes, Route } from "react-router";
 import AppLayout from "./components/AppLayout";
 import Login from "./pages/Login";
+import OwnerLogin from "./pages/OwnerLogin";
+import Register from "./pages/Register";
+import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
 import Menu from "./pages/Menu";
@@ -15,11 +18,14 @@ import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
 import Expenses from "./pages/Expenses";
 import ActivityLogs from "./pages/ActivityLogs";
+import { InventoryGuard } from "./components/InventoryGuard";
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/owner-login" element={<OwnerLogin />} />
+      <Route path="/register" element={<Register />} />
       <Route
         path="/"
         element={
@@ -80,7 +86,9 @@ export default function App() {
         path="/inventory"
         element={
           <AppLayout>
-            <Inventory />
+            <InventoryGuard>
+              <Inventory />
+            </InventoryGuard>
           </AppLayout>
         }
       />
@@ -121,6 +129,14 @@ export default function App() {
         element={
           <AppLayout>
             <ActivityLogs />
+          </AppLayout>
+        }
+      />
+      <Route
+        path="/subscription"
+        element={
+          <AppLayout>
+            <Subscription />
           </AppLayout>
         }
       />

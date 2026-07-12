@@ -116,6 +116,16 @@ export function getDb() {
   return instance;
 }
 
+// Close the underlying pool. Useful for CLI scripts that need to exit cleanly.
+export async function closeDb() {
+  if (poolInstance) {
+    await poolInstance.end();
+    poolInstance = undefined;
+    instance = undefined;
+    connectionTested = false;
+  }
+}
+
 // Exported so the server can verify the database is reachable before accepting traffic.
 export async function checkDatabaseConnection(): Promise<{ ok: boolean; error?: string }> {
   try {

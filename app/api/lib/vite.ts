@@ -40,7 +40,7 @@ export function serveStaticFiles(app: App) {
         const ext = path.extname(filePath).toLowerCase();
         const contentType = mimeTypes[ext] || "application/octet-stream";
         c.header("Content-Type", contentType);
-        return c.body(fs.createReadStream(filePath));
+        return c.body(fs.createReadStream(filePath) as any);
       }
     } catch {
       // File doesn't exist; fall through to SPA index.html.

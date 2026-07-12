@@ -319,17 +319,15 @@ npm start                   # Runs NODE_ENV=production node server.js
 
 ## Deployment
 
-### Kimi Platform (Current)
+### cPanel / Shared Hosting
 
-The app is deployed via Kimi's built-in deployment. Every `npm run build` creates:
-- `dist/public/` - Static frontend (HTML, CSS, JS)
-- `dist/boot.js` - Backend server bundle
+See [DEPLOY.md](DEPLOY.md) for step-by-step cPanel/shared-hosting instructions.
 
-### Self-Hosted (VPS)
+### Self-Hosted (VPS / Local)
 
 ```bash
 # 1. Build
-npm run build
+pnpm run build
 
 # 2. Set environment
 export DATABASE_URL=your-db-url

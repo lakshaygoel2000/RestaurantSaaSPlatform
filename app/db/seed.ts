@@ -1,9 +1,11 @@
-import { getDb } from "../api/queries/connection";
+import { getDb, closeDb } from "../api/queries/connection";
 import { eq } from "drizzle-orm";
+import { hashPassword } from "../api/lib/password";
 import {
   restaurants,
   branches,
   staff,
+  users,
   categories,
   menuItems,
   tables,
@@ -28,8 +30,8 @@ interface RestaurantSeed {
   fssaiNumber: string;
   cuisineType: string;
   description: string;
-  status: "active" | "trial" | "inactive" | "suspended";
-  plan: "starter" | "growth" | "enterprise";
+  status: "pending" | "trial" | "active" | "suspended";
+  plan: "basic" | "standard" | "premium";
 }
 
 const RESTAURANTS: RestaurantSeed[] = [
@@ -47,7 +49,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     cuisineType: "North Indian, South Indian, Chinese",
     description: "A premium multi-cuisine restaurant serving authentic Indian and Chinese delicacies.",
     status: "trial",
-    plan: "growth",
+    plan: "standard",
   },
   {
     name: "Biryani Palace",
@@ -63,7 +65,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     cuisineType: "Hyderabadi, North Indian, Desserts",
     description: "Home of authentic Hyderabadi biryani and kebabs since 1995.",
     status: "active",
-    plan: "enterprise",
+    plan: "premium",
   },
   {
     name: "Coastal Catch Seafood",
@@ -79,7 +81,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     cuisineType: "Coastal, Seafood, Malvani",
     description: "Fresh seafood straight from the coast to your plate.",
     status: "active",
-    plan: "growth",
+    plan: "standard",
   },
   {
     name: "Dosa Point",
@@ -95,7 +97,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     cuisineType: "South Indian, Tamil, Chettinad",
     description: "Authentic South Indian breakfast and meals all day.",
     status: "trial",
-    plan: "starter",
+    plan: "basic",
   },
   {
     name: "Punjabi Dhaba",
@@ -111,7 +113,7 @@ const RESTAURANTS: RestaurantSeed[] = [
     cuisineType: "Punjabi, North Indian, Tandoor",
     description: "Traditional Punjabi flavors with authentic tandoor preparations.",
     status: "active",
-    plan: "growth",
+    plan: "standard",
   },
 ];
 
@@ -143,6 +145,11 @@ async function seed() {
     }
     console.log(`\n--- Creating: ${r.name} ---`);
 
+    // Compute subscription dates
+    const now = new Date();
+    const trialEndsAt = r.status === "trial" ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) : null;
+    const subscriptionExpiresAt = r.status === "active" ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000) : null;
+
     // Create restaurant
     const [restResult] = await db
       .insert(restaurants)
@@ -161,6 +168,9 @@ async function seed() {
         description: r.description,
         status: r.status,
         subscriptionPlan: r.plan,
+        subscriptionStatus: r.status === "active" ? "active" : "trialing",
+        trialEndsAt,
+        subscriptionExpiresAt,
         taxSettings: {
           gstEnabled: true,
           gstRate: 5,
@@ -184,6 +194,25 @@ async function seed() {
     const restaurantId = restResult.id;
     console.log(`  Restaurant ID: ${restaurantId}`);
 
+    // Create owner user (required for owner login)
+    const ownerEmail = `owner@${r.slug}.com`;
+    const ownerPassword = `owner@${r.slug}`;
+    const ownerPasswordHash = await hashPassword(ownerPassword);
+    const [ownerResult] = await db
+      .insert(users)
+      .values({
+        restaurantId,
+        name: `${r.name} Owner`,
+        email: ownerEmail,
+        phone: r.phone,
+        passwordHash: ownerPasswordHash,
+        role: "owner",
+        status: "active",
+      })
+      .$returningId();
+    const ownerUserId = ownerResult.id;
+    console.log(`  Owner user: ${ownerEmail} / ${ownerPassword}`);
+
     // Create branch
     const [branchResult] = await db
       .insert(branches)
@@ -202,7 +231,7 @@ async function seed() {
 
     const branchId = branchResult.id;
 
-    // Create staff
+    // Create staff (including an owner staff record linked to the owner user)
     const staffRoles = [
       { name: `${r.city} Manager`, role: "manager" as const, phone: `${r.phone}1`, email: `manager@${r.slug}.com`, salary: "45000.00" },
       { name: `${r.city} Cashier`, role: "cashier" as const, phone: `${r.phone}2`, email: `cashier@${r.slug}.com`, salary: "22000.00" },
@@ -213,6 +242,7 @@ async function seed() {
 
     for (const s of staffRoles) {
       const username = `${s.role}@${r.slug}`;
+      const passwordHash = await hashPassword(username);
       await db.insert(staff).values({
         restaurantId,
         branchId,
@@ -221,14 +251,31 @@ async function seed() {
         phone: s.phone,
         email: s.email,
         username,
-        passwordHash: username,
+        passwordHash,
         address: `${r.city}, ${r.state}`,
         status: "active",
         salary: s.salary,
         joiningDate: new Date("2024-01-15"),
       });
     }
-    console.log(`  Staff: ${staffRoles.length} members`);
+
+    // Owner staff record (allows owner to also log in via staff login)
+    await db.insert(staff).values({
+      restaurantId,
+      branchId,
+      userId: ownerUserId,
+      name: `${r.name} Owner`,
+      role: "owner",
+      phone: r.phone,
+      email: ownerEmail,
+      username: `owner@${r.slug}`,
+      passwordHash: ownerPasswordHash,
+      address: `${r.city}, ${r.state}`,
+      status: "active",
+      joiningDate: new Date("2024-01-15"),
+    });
+
+    console.log(`  Staff: ${staffRoles.length} members + owner`);
 
     // Create categories
     const categoryIds: number[] = [];
@@ -443,29 +490,22 @@ async function seed() {
 
   console.log("\n=== Seeding complete for 5 restaurants! ===");
   console.log("\nDemo login credentials for each restaurant:");
+  console.log("(Owner login: /owner-login | Staff login: /login)\n");
   for (const r of RESTAURANTS) {
-    // Avoid relying on `db.query.*` (may be unavailable depending on Drizzle runtime helpers)
-    const existingRestaurant = await db
-      .select()
-      .from(restaurants)
-      .where(eq(restaurants.slug, r.slug))
-      .limit(1)
-      .then((rows: any[]) => rows.at(0));
-
-    if (existingRestaurant) {
-      console.log(`Restaurant '${r.slug}' already exists. Skipping...`);
-      continue;
-    }
-
     console.log(`  ${r.name} (${r.slug}):`);
-    console.log(`    manager@${r.slug} / manager@${r.slug} (Manager)`);
-    console.log(`    cashier@${r.slug} / cashier@${r.slug} (Cashier)`);
-    console.log(`    chef@${r.slug} / chef@${r.slug} (Chef)`);
-    console.log(`    waiter@${r.slug} / waiter@${r.slug} (Waiter)`);
+    console.log(`    Owner:     owner@${r.slug}.com / owner@${r.slug}`);
+    console.log(`    Manager:   manager@${r.slug} / manager@${r.slug}`);
+    console.log(`    Cashier:   cashier@${r.slug} / cashier@${r.slug}`);
+    console.log(`    Chef:      chef@${r.slug} / chef@${r.slug}`);
+    console.log(`    Waiter:    waiter@${r.slug} / waiter@${r.slug}`);
+    console.log(`    Accountant: accountant@${r.slug} / accountant@${r.slug}`);
   }
+
+  await closeDb();
 }
 
-seed().catch((err) => {
+seed().catch(async (err) => {
   console.error("Seed error:", err);
+  await closeDb().catch(() => {});
   process.exit(1);
 });

@@ -14,13 +14,21 @@ const queryClient = new QueryClient({
   },
 });
 
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  // Owner token takes precedence when both are present.
+  return (
+    localStorage.getItem("owner_token") || localStorage.getItem("staff_token") || null
+  );
+}
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
       headers() {
-        const token = localStorage.getItem("staff_token");
+        const token = getAuthToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
       },
       fetch(input, init) {
@@ -33,9 +41,7 @@ const trpcClient = trpc.createClient({
 export function TRPCProvider({ children }: { children: ReactNode }) {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </trpc.Provider>
   );
 }

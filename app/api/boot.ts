@@ -41,10 +41,8 @@ app.get("/api/health", healthHandler);
 
 // tRPC API handler
 app.use("/api/trpc/*", async (c) => {
-  const endpoint = new URL(c.req.raw.url).pathname;
-
   return fetchRequestHandler({
-    endpoint,
+    endpoint: "/api/trpc",
     req: c.req.raw,
     router: appRouter,
     createContext,

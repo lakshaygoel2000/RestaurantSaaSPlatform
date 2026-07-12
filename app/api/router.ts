@@ -1,4 +1,5 @@
 import { createRouter, publicQuery } from "./middleware";
+import { authRouter } from "./auth-router";
 import { staffAuthRouter } from "./staff-auth-router";
 import { restaurantRouter } from "./restaurant-router";
 import { menuRouter } from "./menu-router";
@@ -13,7 +14,8 @@ import { activityRouter } from "./activity-router";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
-  auth: staffAuthRouter,
+  auth: authRouter,
+  staffAuth: staffAuthRouter,
   restaurant: restaurantRouter,
   menu: menuRouter,
   table: tableRouter,

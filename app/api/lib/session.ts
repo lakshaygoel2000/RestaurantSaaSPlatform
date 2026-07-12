@@ -1,8 +1,12 @@
 import * as jose from "jose";
-import { env } from "../lib/env";
-import type { SessionPayload } from "./types";
+import { env } from "./env";
 
 const JWT_ALG = "HS256";
+
+export type SessionPayload = {
+  unionId: string;
+  clientId: string;
+};
 
 export async function signSessionToken(
   payload: SessionPayload,
@@ -32,7 +36,7 @@ export async function verifySessionToken(
       console.warn("[session] JWT payload missing required fields.");
       return null;
     }
-    return { unionId, clientId } as SessionPayload;
+    return { unionId: String(unionId), clientId: String(clientId) } as SessionPayload;
   } catch (error) {
     console.warn("[session] JWT verification failed:", error);
     return null;

@@ -1,16 +1,18 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/providers/trpc";
-import { Store, LogIn } from "lucide-react";
+import { Store, LogIn, Loader2 } from "lucide-react";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  const staffLogin = trpc.auth.login.useMutation({
+  const staffLogin = trpc.staffAuth.login.useMutation({
     onSuccess: (data) => {
       localStorage.setItem("staff_token", data.token);
       window.location.href = "/";
@@ -28,11 +30,6 @@ export default function Login() {
     }
     staffLogin.mutate({ username, password });
   };
-
-  // const fillDemo = (u: string, p: string) => {
-  //   setUsername(u);
-  //   setPassword(p);
-  // };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -78,11 +75,38 @@ export default function Login() {
                 className="w-full bg-amber-500 hover:bg-amber-600 text-white h-11"
                 disabled={staffLogin.isPending}
               >
-                <LogIn className="w-5 h-5 mr-2" />
-                {staffLogin.isPending ? "Signing in..." : "Sign In"}
+                {staffLogin.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5 h-5 mr-2" /> Sign In
+                  </>
+                )}
               </Button>
             </form>
 
+            <div className="text-center space-y-2 pt-2">
+              <p className="text-sm text-slate-500">
+                Restaurant owner?{" "}
+                <button
+                  onClick={() => navigate("/owner-login")}
+                  className="text-amber-600 hover:underline"
+                >
+                  Owner login
+                </button>
+              </p>
+              <p className="text-sm text-slate-500">
+                New restaurant?{" "}
+                <button
+                  onClick={() => navigate("/register")}
+                  className="text-amber-600 hover:underline"
+                >
+                  Start free trial
+                </button>
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
