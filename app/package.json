@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild api/server.ts --platform=node --bundle --format=cjs --outdir=dist --external:drizzle-orm --external:mysql2",
+    "build": "vite build && esbuild api/server.ts --platform=node --bundle --format=cjs --outdir=dist",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/server.js",

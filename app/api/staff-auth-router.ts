@@ -110,21 +110,12 @@ export const staffAuthRouter = createRouter({
               }
             : null,
         };
-      // } catch (err) {
-      //   if (err instanceof TRPCError) throw err;
-      //   console.error("[auth.login] Unexpected error:", err);
-      //   throw new TRPCError({
-      //     code: "INTERNAL_SERVER_ERROR",
-      //     message: "Login service unavailable. Please try again in a moment.",
-      //   });
-      // }
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof TRPCError) throw err;
         console.error("[auth.login] Unexpected error:", err);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          // TEMPORARY DEBUG — remove once diagnosed
-          message: `DEBUG ${err?.code || err?.name || "Error"}: ${err?.message || String(err)}`,
+          message: "Login service unavailable. Please try again in a moment.",
         });
       }
     }),
