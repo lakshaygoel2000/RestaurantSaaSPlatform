@@ -47,6 +47,18 @@ function buildPoolConfig() {
     ssl = { rejectUnauthorized: false };
   }
 
+  // TiDB Cloud serverless clusters require secure transport (TLS/SSL).
+  // If SSL isn't explicitly configured, default to a permissive TLS mode
+  // to prevent runtime failures: "Connections using insecure transport are prohibited".
+  const looksLikeTidbCloud = /tidbcloud/i.test(url.hostname);
+  // If DB_SSL_MODE is unset, or explicitly set to accept-invalid/self-signed,
+  // keep the permissive TLS default for TiDB Cloud.
+  if (!ssl && looksLikeTidbCloud && (!sslMode || sslMode === "accept-invalid" || sslMode === "self-signed")) {
+    ssl = { rejectUnauthorized: false };
+  }
+
+
+
   return {
     host: url.hostname,
     // Standard MySQL default is 3306. Only specify a port in the URL when the host requires it.
