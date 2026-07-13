@@ -25820,7 +25820,8 @@ var staffAuthRouter = createRouter({
       console.error("[auth.login] Unexpected error:", err);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
-        message: "Login service unavailable. Please try again in a moment."
+        // TEMPORARY DEBUG — remove once diagnosed
+        message: `DEBUG ${err?.code || err?.name || "Error"}: ${err?.message || String(err)}`
       });
     }
   }),
