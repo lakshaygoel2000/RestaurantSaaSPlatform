@@ -8,8 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build:local": "vite build && esbuild api/server.ts --platform=node --bundle --format=cjs --outdir=dist --external:drizzle-orm --external:mysql2",
-    "build": "echo 'Bypassing cPanel memory limit: Using pre-compiled local dist folder'",  
+    "build": "vite build && esbuild api/server.ts --platform=node --bundle --format=cjs --outdir=dist --external:drizzle-orm --external:mysql2",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/server.js",
