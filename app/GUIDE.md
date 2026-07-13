@@ -99,7 +99,7 @@ Create a `.env` file with your own values:
 DATABASE_URL=mysql://your-user:your-password@your-host:your-port/your-database
 APP_ID=your-app-id
 APP_SECRET=your-app-secret-min-32-chars
-PORT=8080
+PORT=3000
 ```
 
 Replace `DATABASE_URL` with your MySQL/TiDB connection string.
@@ -135,7 +135,7 @@ This creates 5 complete restaurants with staff, menu items, tables, inventory, c
 npm run dev
 ```
 
-Open **http://localhost:8080**
+Open **http://localhost:3000**
 
 Login with any demo credentials from the table above.
 
@@ -296,7 +296,7 @@ activity       → tenantQuery    → create, list
 
 ```bash
 # Development
-npm run dev                 # Start dev server (http://localhost:8080)
+npm run dev                 # Start dev server (http://localhost:3000)
 
 # Build
 npm run build               # Build for production
@@ -388,7 +388,7 @@ The APK needs to know where your backend server is. Edit `.env`:
 # For local testing (PC and phone on same WiFi):
 # Find your PC's IP: ipconfig (Windows) or ifconfig (Mac/Linux)
 # Then add this line to .env:
-VITE_API_URL=http://192.168.1.xxx:8080
+VITE_API_URL=http://192.168.1.xxx:3000
 
 # For production (your deployed backend):
 VITE_API_URL=https://your-domain.com
@@ -416,7 +416,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://localhost:8080/api/;
+        proxy_pass http://localhost:3000/api/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -499,7 +499,7 @@ console.log('OK:', r.length, 'restaurants');
 | `APP_SECRET` | JWT signing secret | Yes |
 | `VITE_APP_ID` | Frontend app ID | Yes |
 | `OWNER_UNION_ID` | Admin identifier | Yes |
-| `PORT` | Server port | No (default: 8080) |
+| `PORT` | Server port | No (default: 3000) |
 | `DB_SSL_MODE` | `disabled` / `required` / `accept-invalid` | No |
 | `DB_CONNECTION_LIMIT` | MySQL pool size | No (default: 10) |
 

@@ -52,7 +52,7 @@ npx tsx db/seed.ts
 npm run dev
 ```
 
-Open **http://localhost:8080** and login with demo credentials:
+Open **http://localhost:3000** and login with demo credentials:
 - `manager@spice-garden` / `manager@spice-garden`
 
 ## Project Structure

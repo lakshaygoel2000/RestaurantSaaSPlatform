@@ -4,7 +4,7 @@ import app from "./boot";
 import { env } from "./lib/env";
 import { checkDatabaseConnection } from "./queries/connection";
 
-const port = parseInt(process.env.PORT || "" + 8080);
+const port = parseInt(process.env.PORT || "" + 3000);
 
 function assertProduction() {
   if (!env.isProduction) {
