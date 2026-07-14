@@ -28,6 +28,11 @@ export default function OwnerLogin() {
     ownerLogin.mutate({ email, password });
   };
 
+  // Extract a user-friendly error message from tRPC error
+  const errorMessage = ownerLogin.error?.message || "";
+  const isDbError = errorMessage.toLowerCase().includes("database") ||
+    errorMessage.toLowerCase().includes("connection failed");
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
       <div className="w-full max-w-sm">
@@ -80,7 +85,16 @@ export default function OwnerLogin() {
 
               {ownerLogin.error && (
                 <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
-                  {ownerLogin.error.message}
+                  {isDbError ? (
+                    <>
+                      <p className="font-semibold">Unable to connect to the server database.</p>
+                      <p className="mt-1 text-red-500">
+                        Please try again in a moment. If the problem persists, contact support.
+                      </p>
+                    </>
+                  ) : (
+                    errorMessage
+                  )}
                 </div>
               )}
 

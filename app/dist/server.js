@@ -29324,7 +29324,9 @@ async function verifySessionToken(token) {
   try {
     const secret = new TextEncoder().encode(env.appSecret);
     const { payload } = await jwtVerify(token, secret, {
-      algorithms: [JWT_ALG]
+      algorithms: [JWT_ALG],
+      clockTolerance: 60
+      // Allow 60 seconds of clock skew (common on shared hosting)
     });
     const { unionId, clientId } = payload;
     if (!unionId || !clientId) {
@@ -29333,7 +29335,13 @@ async function verifySessionToken(token) {
     }
     return { unionId: String(unionId), clientId: String(clientId) };
   } catch (error51) {
-    console.warn("[session] JWT verification failed:", error51);
+    if (error51?.code === "ERR_JWT_EXPIRED") {
+      console.warn("[session] JWT verification failed: token expired");
+    } else if (error51?.code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED") {
+      console.warn("[session] JWT verification failed: invalid signature");
+    } else {
+      console.warn("[session] JWT verification failed:", error51?.message || error51);
+    }
     return null;
   }
 }
@@ -35748,39 +35756,13 @@ __export(schema_exports, {
   users: () => users
 });
 
-// db/schema/users.ts
-var users = mysqlTable(
-  "users",
-  {
-    id: serial("id").primaryKey(),
-    restaurantId: bigint("restaurant_id", {
-      mode: "number",
-      unsigned: true
-    }).notNull(),
-    name: varchar("name", { length: 255 }),
-    email: varchar("email", { length: 320 }).notNull(),
-    phone: varchar("phone", { length: 20 }),
-    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
-    role: mysqlEnum("role", ["owner", "admin"]).default("owner").notNull(),
-    status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
-    emailVerified: boolean("email_verified").default(false).notNull(),
-    lastSignInAt: timestamp("last_sign_in_at"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull()
-  },
-  (table) => ({
-    emailIdx: uniqueIndex("user_email_idx").on(table.email),
-    restaurantIdx: uniqueIndex("user_restaurant_idx").on(table.restaurantId)
-  })
-);
-
 // db/schema/restaurants.ts
 var restaurants = mysqlTable(
   "restaurants",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    slug: varchar("slug", { length: 255 }).notNull().unique(),
+    slug: varchar("slug", { length: 255 }).notNull(),
     logo: text("logo"),
     email: varchar("email", { length: 320 }),
     phone: varchar("phone", { length: 20 }),
@@ -35827,11 +35809,11 @@ var restaurants = mysqlTable(
 var branches = mysqlTable(
   "branches",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     address: text("address"),
     city: varchar("city", { length: 100 }),
@@ -35845,7 +35827,34 @@ var branches = mysqlTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    restaurantIdx: index("branch_restaurant_idx").on(table.restaurantId)
+    restaurantIdx: index("branch_restaurant_idx").on(table.restaurantId),
+    statusIdx: index("branch_status_idx").on(table.status)
+  })
+);
+
+// db/schema/users.ts
+var users = mysqlTable(
+  "users",
+  {
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+    restaurantId: bigint("restaurant_id", {
+      mode: "number",
+      unsigned: true
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }),
+    email: varchar("email", { length: 320 }).notNull(),
+    phone: varchar("phone", { length: 20 }),
+    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    role: mysqlEnum("role", ["owner", "admin"]).default("owner").notNull(),
+    status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+    emailVerified: boolean("email_verified").default(false).notNull(),
+    lastSignInAt: timestamp("last_sign_in_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull()
+  },
+  (table) => ({
+    emailIdx: uniqueIndex("user_email_idx").on(table.email),
+    restaurantIdx: index("user_restaurant_idx").on(table.restaurantId)
   })
 );
 
@@ -35853,13 +35862,19 @@ var branches = mysqlTable(
 var staff = mysqlTable(
   "staff",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
-    userId: bigint("user_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
+    userId: bigint("user_id", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 320 }),
     phone: varchar("phone", { length: 20 }),
@@ -35878,10 +35893,11 @@ var staff = mysqlTable(
     salary: decimal("salary", { precision: 10, scale: 2 }),
     joiningDate: date("joining_date"),
     status: mysqlEnum("status", ["active", "inactive", "on_leave"]).default("active").notNull(),
-    username: varchar("username", { length: 255 }).unique(),
+    username: varchar("username", { length: 255 }).notNull(),
     passwordHash: varchar("password_hash", { length: 255 }),
     address: text("address"),
     lastActiveAt: timestamp("last_active_at"),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
@@ -35891,6 +35907,9 @@ var staff = mysqlTable(
     roleIdx: index("staff_role_idx").on(table.role),
     statusIdx: index("staff_status_idx").on(table.status),
     usernameIdx: uniqueIndex("staff_username_idx").on(table.username),
+    emailIdx: index("staff_email_idx").on(table.email),
+    phoneIdx: index("staff_phone_idx").on(table.phone),
+    deletedIdx: index("staff_deleted_idx").on(table.deletedAt),
     restaurantRoleIdx: index("staff_rest_role_idx").on(table.restaurantId, table.role),
     restaurantStatusIdx: index("staff_rest_status_idx").on(table.restaurantId, table.status)
   })
@@ -35900,39 +35919,50 @@ var staff = mysqlTable(
 var categories = mysqlTable(
   "categories",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     image: text("image"),
     sortOrder: int("sort_order").default(0).notNull(),
     status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
-    parentId: bigint("parent_id", { mode: "number", unsigned: true }),
+    parentId: bigint("parent_id", { mode: "number", unsigned: true }).references(
+      () => categories.id,
+      { onDelete: "cascade" }
+    ),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("cat_restaurant_idx").on(table.restaurantId),
-    statusIdx: index("cat_status_idx").on(table.status)
+    branchIdx: index("cat_branch_idx").on(table.branchId),
+    statusIdx: index("cat_status_idx").on(table.status),
+    parentIdx: index("cat_parent_idx").on(table.parentId)
   })
 );
 var menuItems = mysqlTable(
   "menu_items",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     categoryId: bigint("category_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
+    }).notNull().references(() => categories.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     shortCode: varchar("short_code", { length: 50 }),
@@ -35955,14 +35985,18 @@ var menuItems = mysqlTable(
       "out_of_stock"
     ]).default("available").notNull(),
     status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("item_restaurant_idx").on(table.restaurantId),
+    branchIdx: index("item_branch_idx").on(table.branchId),
     categoryIdx: index("item_category_idx").on(table.categoryId),
     statusIdx: index("item_status_idx").on(table.status),
     availabilityIdx: index("item_availability_idx").on(table.availability),
+    shortCodeIdx: index("item_shortcode_idx").on(table.shortCode),
+    deletedIdx: index("item_deleted_idx").on(table.deletedAt),
     restaurantStatusIdx: index("item_rest_status_idx").on(table.restaurantId, table.status),
     restaurantCategoryIdx: index("item_rest_cat_idx").on(table.restaurantId, table.categoryId)
   })
@@ -35972,12 +36006,15 @@ var menuItems = mysqlTable(
 var tables = mysqlTable(
   "tables",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 50 }).notNull(),
     section: varchar("section", { length: 100 }).default("Main Hall"),
     capacity: int("capacity").default(4).notNull(),
@@ -36003,19 +36040,27 @@ var tables = mysqlTable(
     restaurantIdx: index("table_restaurant_idx").on(table.restaurantId),
     branchIdx: index("table_branch_idx").on(table.branchId),
     statusIdx: index("table_status_idx").on(table.status),
+    nameIdx: index("table_name_idx").on(table.name),
+    sectionIdx: index("table_section_idx").on(table.section),
     restaurantStatusIdx: index("table_rest_status_idx").on(table.restaurantId, table.status)
   })
 );
 var orders = mysqlTable(
   "orders",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
-    tableId: bigint("table_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
+    tableId: bigint("table_id", { mode: "number", unsigned: true }).references(
+      () => tables.id,
+      { onDelete: "set null" }
+    ),
     orderNumber: varchar("order_number", { length: 50 }).notNull(),
     orderType: mysqlEnum("order_type", [
       "dine_in",
@@ -36043,7 +36088,10 @@ var orders = mysqlTable(
     customerName: varchar("customer_name", { length: 255 }),
     customerPhone: varchar("customer_phone", { length: 20 }),
     customerCount: int("customer_count").default(1),
-    stewardId: bigint("steward_id", { mode: "number", unsigned: true }),
+    stewardId: bigint("steward_id", { mode: "number", unsigned: true }).references(
+      () => staff.id,
+      { onDelete: "set null" }
+    ),
     subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0.00"),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default(
       "0.00"
@@ -36076,6 +36124,10 @@ var orders = mysqlTable(
     statusIdx: index("order_status_idx").on(table.status),
     paymentIdx: index("order_payment_idx").on(table.paymentStatus),
     orderNumIdx: index("order_num_idx").on(table.orderNumber),
+    orderTypeIdx: index("order_type_idx").on(table.orderType),
+    customerPhoneIdx: index("order_customer_phone_idx").on(table.customerPhone),
+    stewardIdx: index("order_steward_idx").on(table.stewardId),
+    completedIdx: index("order_completed_idx").on(table.completedAt),
     createdIdx: index("order_created_idx").on(table.createdAt),
     restaurantStatusIdx: index("order_rest_status_idx").on(table.restaurantId, table.status),
     restaurantCreatedIdx: index("order_rest_created_idx").on(table.restaurantId, table.createdAt)
@@ -36084,12 +36136,12 @@ var orders = mysqlTable(
 var orderItems = mysqlTable(
   "order_items",
   {
-    id: serial("id").primaryKey(),
-    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull().references(() => orders.id, { onDelete: "cascade" }),
     menuItemId: bigint("menu_item_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
+    }).notNull().references(() => menuItems.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     variant: varchar("variant", { length: 255 }),
     addons: json("addons").$type(),
@@ -36110,18 +36162,19 @@ var orderItems = mysqlTable(
   },
   (table) => ({
     orderIdx: index("oi_order_idx").on(table.orderId),
+    menuItemIdx: index("oi_menu_item_idx").on(table.menuItemId),
     kitchenIdx: index("oi_kitchen_idx").on(table.kitchenStatus)
   })
 );
 var payments = mysqlTable(
   "payments",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull().references(() => orders.id, { onDelete: "cascade" }),
     amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
     method: mysqlEnum("method", [
       "cash",
@@ -36139,14 +36192,21 @@ var payments = mysqlTable(
     ),
     transactionId: varchar("transaction_id", { length: 255 }),
     receiptNumber: varchar("receipt_number", { length: 50 }),
-    processedBy: bigint("processed_by", { mode: "number", unsigned: true }),
+    processedBy: bigint("processed_by", { mode: "number", unsigned: true }).references(
+      () => staff.id,
+      { onDelete: "set null" }
+    ),
     notes: text("notes"),
-    createdAt: timestamp("created_at").defaultNow().notNull()
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("pay_restaurant_idx").on(table.restaurantId),
     orderIdx: index("pay_order_idx").on(table.orderId),
     methodIdx: index("pay_method_idx").on(table.method),
+    statusIdx: index("pay_status_idx").on(table.status),
+    transactionIdx: index("pay_transaction_idx").on(table.transactionId),
+    processedByIdx: index("pay_processed_by_idx").on(table.processedBy),
     createdIdx: index("pay_created_idx").on(table.createdAt),
     restaurantCreatedIdx: index("pay_rest_created_idx").on(table.restaurantId, table.createdAt)
   })
@@ -36156,12 +36216,15 @@ var payments = mysqlTable(
 var inventoryItems = mysqlTable(
   "inventory_items",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     category: varchar("category", { length: 100 }),
     unit: varchar("unit", { length: 50 }).notNull(),
@@ -36179,24 +36242,29 @@ var inventoryItems = mysqlTable(
     location: varchar("location", { length: 100 }),
     expiryDate: date("expiry_date"),
     status: mysqlEnum("status", ["in_stock", "low_stock", "out_of_stock"]).default("in_stock").notNull(),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("inv_restaurant_idx").on(table.restaurantId),
+    branchIdx: index("inv_branch_idx").on(table.branchId),
+    categoryIdx: index("inv_category_idx").on(table.category),
+    nameIdx: index("inv_name_idx").on(table.name),
     statusIdx: index("inv_status_idx").on(table.status),
     supplierIdx: index("inv_supplier_idx").on(table.supplierId),
+    deletedIdx: index("inv_deleted_idx").on(table.deletedAt),
     restaurantStatusIdx: index("inv_rest_status_idx").on(table.restaurantId, table.status)
   })
 );
 var suppliers = mysqlTable(
   "suppliers",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     contactPerson: varchar("contact_person", { length: 255 }),
     phone: varchar("phone", { length: 20 }),
@@ -36209,7 +36277,9 @@ var suppliers = mysqlTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
-    restaurantIdx: index("supp_restaurant_idx").on(table.restaurantId)
+    restaurantIdx: index("supp_restaurant_idx").on(table.restaurantId),
+    statusIdx: index("supp_status_idx").on(table.status),
+    nameIdx: index("supp_name_idx").on(table.name)
   })
 );
 
@@ -36217,11 +36287,11 @@ var suppliers = mysqlTable(
 var customers = mysqlTable(
   "customers",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     phone: varchar("phone", { length: 20 }),
     email: varchar("email", { length: 320 }),
@@ -36237,23 +36307,32 @@ var customers = mysqlTable(
     tags: json("tags").$type(),
     loyaltyPoints: int("loyalty_points").default(0),
     notes: text("notes"),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("cust_restaurant_idx").on(table.restaurantId),
-    phoneIdx: index("cust_phone_idx").on(table.phone)
+    phoneIdx: index("cust_phone_idx").on(table.phone),
+    emailIdx: index("cust_email_idx").on(table.email),
+    nameIdx: index("cust_name_idx").on(table.name),
+    deletedIdx: index("cust_deleted_idx").on(table.deletedAt),
+    loyaltyIdx: index("cust_loyalty_idx").on(table.loyaltyPoints),
+    lastVisitIdx: index("cust_last_visit_idx").on(table.lastVisit)
   })
 );
 var expenses = mysqlTable(
   "expenses",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     category: varchar("category", { length: 100 }).notNull(),
     description: text("description"),
     amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
@@ -36264,35 +36343,50 @@ var expenses = mysqlTable(
       "bank_transfer"
     ]).default("cash").notNull(),
     receiptUrl: text("receipt_url"),
-    incurredBy: bigint("incurred_by", { mode: "number", unsigned: true }),
+    incurredBy: bigint("incurred_by", { mode: "number", unsigned: true }).references(
+      () => staff.id,
+      { onDelete: "set null" }
+    ),
     expenseDate: date("expense_date").notNull(),
     status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull()
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("exp_restaurant_idx").on(table.restaurantId),
+    branchIdx: index("exp_branch_idx").on(table.branchId),
+    statusIdx: index("exp_status_idx").on(table.status),
+    categoryIdx: index("exp_category_idx").on(table.category),
+    incurredByIdx: index("exp_incurred_by_idx").on(table.incurredBy),
     dateIdx: index("exp_date_idx").on(table.expenseDate)
   })
 );
 var activityLogs = mysqlTable(
   "activity_logs",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true
-    }).notNull(),
-    staffId: bigint("staff_id", { mode: "number", unsigned: true }),
+    }).notNull().references(() => restaurants.id, { onDelete: "cascade" }),
+    staffId: bigint("staff_id", { mode: "number", unsigned: true }).references(
+      () => staff.id,
+      { onDelete: "set null" }
+    ),
     userName: varchar("user_name", { length: 255 }),
     action: varchar("action", { length: 100 }).notNull(),
     entityType: varchar("entity_type", { length: 50 }).notNull(),
     entityId: bigint("entity_id", { mode: "number", unsigned: true }),
     details: json("details"),
     ipAddress: varchar("ip_address", { length: 45 }),
-    createdAt: timestamp("created_at").defaultNow().notNull()
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull()
   },
   (table) => ({
     restaurantIdx: index("log_restaurant_idx").on(table.restaurantId),
+    staffIdx: index("log_staff_idx").on(table.staffId),
+    actionIdx: index("log_action_idx").on(table.action),
+    entityIdx: index("log_entity_idx").on(table.entityType, table.entityId),
     createdIdx: index("log_created_idx").on(table.createdAt)
   })
 );
@@ -36479,9 +36573,49 @@ function parseSslOption(value) {
     return { rejectUnauthorized: false };
   }
 }
+function parseDatabaseUrl(urlString) {
+  let url2;
+  try {
+    url2 = new URL(urlString);
+  } catch (err) {
+    console.warn("[DB] Failed to parse DATABASE_URL with URL constructor, trying fallback parser:", err);
+    const fallback = parseDatabaseUrlFallback(urlString);
+    if (!fallback) {
+      throw new Error(`Invalid DATABASE_URL: unable to parse connection string`);
+    }
+    return fallback;
+  }
+  const pathname = url2.pathname || "";
+  const database = pathname.replace(/^\//, "").split("?")[0];
+  if (!database) {
+    throw new Error(`Invalid DATABASE_URL: no database name found in path`);
+  }
+  return {
+    host: url2.hostname,
+    port: url2.port ? Number(url2.port) : 3306,
+    user: decodeURIComponent(url2.username),
+    password: decodeURIComponent(url2.password),
+    database,
+    sslQueryParam: url2.searchParams.get("ssl")
+  };
+}
+function parseDatabaseUrlFallback(urlString) {
+  const match2 = urlString.match(
+    /^mysql:\/\/([^:@]+)(?::([^@]*))?@([^:\/]+)(?::(\d+))?\/([^?]+)(?:\?.*)?$/i
+  );
+  if (!match2) return null;
+  return {
+    host: match2[3],
+    port: match2[4] ? Number(match2[4]) : 3306,
+    user: decodeURIComponent(match2[1]),
+    password: match2[2] ? decodeURIComponent(match2[2]) : "",
+    database: match2[5],
+    sslQueryParam: null
+  };
+}
 function buildPoolConfig() {
-  const url2 = new URL(env.databaseUrl);
-  let ssl = parseSslOption(url2.searchParams.get("ssl"));
+  const parsed = parseDatabaseUrl(env.databaseUrl);
+  let ssl = parseSslOption(parsed.sslQueryParam);
   const sslMode = process.env.DB_SSL_MODE?.toLowerCase();
   if (sslMode === "disabled" || sslMode === "false" || sslMode === "no") {
     ssl = void 0;
@@ -36490,23 +36624,32 @@ function buildPoolConfig() {
   } else if (sslMode === "accept-invalid" || sslMode === "self-signed") {
     ssl = { rejectUnauthorized: false };
   }
-  const looksLikeTidbCloud = /tidbcloud/i.test(url2.hostname);
+  const looksLikeTidbCloud = /tidbcloud/i.test(parsed.host);
   if (!ssl && looksLikeTidbCloud && (!sslMode || sslMode === "accept-invalid" || sslMode === "self-signed")) {
     ssl = { rejectUnauthorized: false };
   }
+  const isLocalhost = /^(localhost|127\.0\.0\.1)$/i.test(parsed.host);
+  if (!ssl && isLocalhost && !sslMode) {
+    ssl = void 0;
+  }
+  const connectionLimit = Number(process.env.DB_CONNECTION_LIMIT || "10");
+  const connectTimeout = Number(process.env.DB_CONNECT_TIMEOUT || "10000");
+  const acquireTimeout = Number(process.env.DB_ACQUIRE_TIMEOUT || "10000");
+  const queueLimit = Number(process.env.DB_QUEUE_LIMIT || "20");
   return {
-    host: url2.hostname,
-    // Standard MySQL default is 3306. Only specify a port in the URL when the host requires it.
-    port: url2.port ? Number(url2.port) : 3306,
-    user: url2.username,
-    // Safely decodes special symbols (@, #, $) inside the password.
-    password: decodeURIComponent(url2.password),
-    // Isolates ONLY the dbname by stripping away trailing ?ssl=... parameters.
-    database: url2.pathname.replace(/^\//, "").split("?")[0],
+    host: parsed.host,
+    port: parsed.port,
+    user: parsed.user,
+    password: parsed.password,
+    database: parsed.database,
     ssl,
-    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || "10"),
-    // Keep idle connections alive on shared hosting to reduce handshake churn.
-    enableKeepAlive: true
+    connectionLimit: Math.max(1, Math.min(connectionLimit, 50)),
+    connectTimeout,
+    acquireTimeout,
+    waitForConnections: true,
+    queueLimit: Math.max(0, queueLimit),
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 1e4
   };
 }
 async function testConnection(pool) {
@@ -36524,19 +36667,7 @@ function getDb() {
     console.log("[DB] Creating connection pool:", safeConfig);
     const connectionPool = import_promise.default.createPool(config2);
     poolInstance = connectionPool;
-    const baseDb = drizzle(connectionPool);
-    const dialect = baseDb.dialect;
-    const createRootQueries = dialect?.createRootQueries;
-    if (typeof createRootQueries === "function") {
-      const rootQueries = createRootQueries(baseDb, fullSchema);
-      Object.assign(baseDb, rootQueries);
-      Object.assign(baseDb, {
-        query: rootQueries.query,
-        queries: rootQueries.queries
-      });
-    } else {
-      Object.assign(baseDb, { schema: fullSchema });
-    }
+    const baseDb = drizzle(connectionPool, { schema: fullSchema, mode: "default" });
     if (!connectionTested) {
       connectionTested = true;
       testConnection(connectionPool).then(() => console.log("[DB] Connection verified")).catch((err) => {
@@ -36890,7 +37021,7 @@ __export(external_exports, {
   httpUrl: () => httpUrl,
   includes: () => _includes,
   instanceof: () => _instanceof,
-  int: () => int2,
+  int: () => int6,
   int32: () => int32,
   int64: () => int64,
   intersection: () => intersection,
@@ -49250,7 +49381,7 @@ __export(schemas_exports2, {
   hostname: () => hostname2,
   httpUrl: () => httpUrl,
   instanceof: () => _instanceof,
-  int: () => int2,
+  int: () => int6,
   int32: () => int32,
   int64: () => int64,
   intersection: () => intersection,
@@ -49905,10 +50036,10 @@ var ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
       return this.check(_lte(value, params));
     },
     int(params) {
-      return this.check(int2(params));
+      return this.check(int6(params));
     },
     safe(params) {
-      return this.check(int2(params));
+      return this.check(int6(params));
     },
     positive(params) {
       return this.check(_gt(0, params));
@@ -49946,7 +50077,7 @@ var ZodNumberFormat = /* @__PURE__ */ $constructor("ZodNumberFormat", (inst, def
   $ZodNumberFormat.init(inst, def);
   ZodNumber.init(inst, def);
 });
-function int2(params) {
+function int6(params) {
   return _int(ZodNumberFormat, params);
 }
 function float32(params) {
@@ -51374,53 +51505,70 @@ var authRouter = createRouter({
       password: external_exports.string().min(1, "Password is required")
     })
   ).mutation(async ({ input }) => {
-    const db = getDb();
-    const owner = await db.select().from(users).where(eq(users.email, input.email)).then((rows) => rows[0]);
-    if (!owner) {
+    try {
+      const db = getDb();
+      const owner = await db.select().from(users).where(eq(users.email, input.email)).then((rows) => rows[0]);
+      if (!owner) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid email or password"
+        });
+      }
+      if (owner.status === "inactive") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Account is inactive. Contact support."
+        });
+      }
+      const validPassword = await verifyPassword(input.password, owner.passwordHash);
+      if (!validPassword) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid email or password"
+        });
+      }
+      const restaurant = await db.select().from(restaurants).where(eq(restaurants.id, owner.restaurantId)).then((rows) => rows[0]);
+      await db.update(users).set({ lastSignInAt: /* @__PURE__ */ new Date() }).where(eq(users.id, owner.id));
+      const token = await signSessionToken({
+        unionId: `owner_${owner.id}`,
+        clientId: restaurant?.slug || "restaurantos"
+      });
+      return {
+        token,
+        owner: {
+          id: owner.id,
+          name: owner.name,
+          email: owner.email,
+          role: owner.role,
+          restaurantId: owner.restaurantId
+        },
+        restaurant: restaurant ? {
+          id: restaurant.id,
+          name: restaurant.name,
+          slug: restaurant.slug,
+          status: restaurant.status,
+          subscriptionPlan: restaurant.subscriptionPlan,
+          subscriptionStatus: restaurant.subscriptionStatus,
+          trialEndsAt: restaurant.trialEndsAt,
+          subscriptionExpiresAt: restaurant.subscriptionExpiresAt
+        } : null
+      };
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      const isDbError = err && typeof err === "object" && (err.code?.startsWith("ECONN") || err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ER_ACCESS_DENIED_ERROR" || err.code === "ER_BAD_DB_ERROR" || err.sqlMessage || err.sql);
+      if (isDbError) {
+        console.error("[auth.ownerLogin] DATABASE ERROR:", err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database connection failed. Please check server logs."
+        });
+      }
+      console.error("[auth.ownerLogin] Unexpected error:", err);
       throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Invalid email or password"
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Login service unavailable. Please try again in a moment."
       });
     }
-    if (owner.status === "inactive") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "Account is inactive. Contact support."
-      });
-    }
-    const validPassword = await verifyPassword(input.password, owner.passwordHash);
-    if (!validPassword) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Invalid email or password"
-      });
-    }
-    const restaurant = await db.select().from(restaurants).where(eq(restaurants.id, owner.restaurantId)).then((rows) => rows[0]);
-    await db.update(users).set({ lastSignInAt: /* @__PURE__ */ new Date() }).where(eq(users.id, owner.id));
-    const token = await signSessionToken({
-      unionId: `owner_${owner.id}`,
-      clientId: restaurant?.slug || "restaurantos"
-    });
-    return {
-      token,
-      owner: {
-        id: owner.id,
-        name: owner.name,
-        email: owner.email,
-        role: owner.role,
-        restaurantId: owner.restaurantId
-      },
-      restaurant: restaurant ? {
-        id: restaurant.id,
-        name: restaurant.name,
-        slug: restaurant.slug,
-        status: restaurant.status,
-        subscriptionPlan: restaurant.subscriptionPlan,
-        subscriptionStatus: restaurant.subscriptionStatus,
-        trialEndsAt: restaurant.trialEndsAt,
-        subscriptionExpiresAt: restaurant.subscriptionExpiresAt
-      } : null
-    };
   }),
   // Verify owner token and return owner info
   ownerMe: publicQuery.query(async ({ ctx }) => {
@@ -51573,7 +51721,15 @@ var staffAuthRouter = createRouter({
       };
     } catch (err) {
       if (err instanceof TRPCError) throw err;
-      console.error("[auth.login] Unexpected error:", err);
+      const isDbError = err && typeof err === "object" && (err.code?.startsWith("ECONN") || err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ER_ACCESS_DENIED_ERROR" || err.code === "ER_BAD_DB_ERROR" || err.sqlMessage || err.sql);
+      if (isDbError) {
+        console.error("[staffAuth.login] DATABASE ERROR:", err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database connection failed. Please check server logs."
+        });
+      }
+      console.error("[staffAuth.login] Unexpected error:", err);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "Login service unavailable. Please try again in a moment."

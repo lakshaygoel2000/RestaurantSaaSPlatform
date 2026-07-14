@@ -1,16 +1,20 @@
 import {
   mysqlTable,
   mysqlEnum,
-  serial,
+  bigint,
   varchar,
   text,
   timestamp,
-  bigint,
   int,
+  bigint,
   decimal,
   json,
   index,
 } from "drizzle-orm/mysql-core";
+import { restaurants } from "./restaurants";
+import { branches } from "./restaurants";
+import { staff } from "./staff";
+import { menuItems } from "./menu";
 
 // ─────────────────────────────────────────────
 // TABLES (Dining tables)
@@ -18,12 +22,17 @@ import {
 export const tables = mysqlTable(
   "tables",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 50 }).notNull(),
     section: varchar("section", { length: 100 }).default("Main Hall"),
     capacity: int("capacity").default(4).notNull(),
@@ -51,6 +60,8 @@ export const tables = mysqlTable(
     restaurantIdx: index("table_restaurant_idx").on(table.restaurantId),
     branchIdx: index("table_branch_idx").on(table.branchId),
     statusIdx: index("table_status_idx").on(table.status),
+    nameIdx: index("table_name_idx").on(table.name),
+    sectionIdx: index("table_section_idx").on(table.section),
     restaurantStatusIdx: index("table_rest_status_idx").on(table.restaurantId, table.status),
   })
 );
@@ -64,13 +75,21 @@ export type InsertTable = typeof tables.$inferInsert;
 export const orders = mysqlTable(
   "orders",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
-    tableId: bigint("table_id", { mode: "number", unsigned: true }),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
+    tableId: bigint("table_id", { mode: "number", unsigned: true }).references(
+      () => tables.id,
+      { onDelete: "set null" }
+    ),
     orderNumber: varchar("order_number", { length: 50 }).notNull(),
     orderType: mysqlEnum("order_type", [
       "dine_in",
@@ -104,7 +123,10 @@ export const orders = mysqlTable(
     customerName: varchar("customer_name", { length: 255 }),
     customerPhone: varchar("customer_phone", { length: 20 }),
     customerCount: int("customer_count").default(1),
-    stewardId: bigint("steward_id", { mode: "number", unsigned: true }),
+    stewardId: bigint("steward_id", { mode: "number", unsigned: true }).references(
+      () => staff.id,
+      { onDelete: "set null" }
+    ),
     subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0.00"),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default(
       "0.00"
@@ -137,6 +159,10 @@ export const orders = mysqlTable(
     statusIdx: index("order_status_idx").on(table.status),
     paymentIdx: index("order_payment_idx").on(table.paymentStatus),
     orderNumIdx: index("order_num_idx").on(table.orderNumber),
+    orderTypeIdx: index("order_type_idx").on(table.orderType),
+    customerPhoneIdx: index("order_customer_phone_idx").on(table.customerPhone),
+    stewardIdx: index("order_steward_idx").on(table.stewardId),
+    completedIdx: index("order_completed_idx").on(table.completedAt),
     createdIdx: index("order_created_idx").on(table.createdAt),
     restaurantStatusIdx: index("order_rest_status_idx").on(table.restaurantId, table.status),
     restaurantCreatedIdx: index("order_rest_created_idx").on(table.restaurantId, table.createdAt),
@@ -152,12 +178,16 @@ export type InsertOrder = typeof orders.$inferInsert;
 export const orderItems = mysqlTable(
   "order_items",
   {
-    id: serial("id").primaryKey(),
-    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+    orderId: bigint("order_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
     menuItemId: bigint("menu_item_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
+    })
+      .notNull()
+      .references(() => menuItems.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     variant: varchar("variant", { length: 255 }),
     addons: json("addons").$type<{ name: string; price: number }[]>(),
@@ -180,6 +210,7 @@ export const orderItems = mysqlTable(
   },
   (table) => ({
     orderIdx: index("oi_order_idx").on(table.orderId),
+    menuItemIdx: index("oi_menu_item_idx").on(table.menuItemId),
     kitchenIdx: index("oi_kitchen_idx").on(table.kitchenStatus),
   })
 );
@@ -193,12 +224,16 @@ export type InsertOrderItem = typeof orderItems.$inferInsert;
 export const payments = mysqlTable(
   "payments",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    orderId: bigint("order_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
     amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
     method: mysqlEnum("method", [
       "cash",
@@ -220,14 +255,21 @@ export const payments = mysqlTable(
     ),
     transactionId: varchar("transaction_id", { length: 255 }),
     receiptNumber: varchar("receipt_number", { length: 50 }),
-    processedBy: bigint("processed_by", { mode: "number", unsigned: true }),
+    processedBy: bigint("processed_by", { mode: "number", unsigned: true }).references(
+      () => staff.id,
+      { onDelete: "set null" }
+    ),
     notes: text("notes"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
     restaurantIdx: index("pay_restaurant_idx").on(table.restaurantId),
     orderIdx: index("pay_order_idx").on(table.orderId),
     methodIdx: index("pay_method_idx").on(table.method),
+    statusIdx: index("pay_status_idx").on(table.status),
+    transactionIdx: index("pay_transaction_idx").on(table.transactionId),
+    processedByIdx: index("pay_processed_by_idx").on(table.processedBy),
     createdIdx: index("pay_created_idx").on(table.createdAt),
     restaurantCreatedIdx: index("pay_rest_created_idx").on(table.restaurantId, table.createdAt),
   })

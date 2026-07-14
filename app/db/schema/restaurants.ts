@@ -1,11 +1,11 @@
 import {
   mysqlTable,
   mysqlEnum,
-  serial,
+  bigint,
   varchar,
   text,
   timestamp,
-  bigint,
+  int,
   boolean,
   json,
   index,
@@ -18,9 +18,10 @@ import {
 export const restaurants = mysqlTable(
   "restaurants",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    slug: varchar("slug", { length: 255 }).notNull().unique(),
+    slug: varchar("slug", { length: 255 }).notNull(),
+
     logo: text("logo"),
     email: varchar("email", { length: 320 }),
     phone: varchar("phone", { length: 20 }),
@@ -109,11 +110,13 @@ export type InsertRestaurant = typeof restaurants.$inferInsert;
 export const branches = mysqlTable(
   "branches",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     address: text("address"),
     city: varchar("city", { length: 100 }),
@@ -130,6 +133,7 @@ export const branches = mysqlTable(
   },
   (table) => ({
     restaurantIdx: index("branch_restaurant_idx").on(table.restaurantId),
+    statusIdx: index("branch_status_idx").on(table.status),
   })
 );
 

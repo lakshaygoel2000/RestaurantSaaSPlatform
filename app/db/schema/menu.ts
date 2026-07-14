@@ -1,17 +1,19 @@
 import {
   mysqlTable,
   mysqlEnum,
-  serial,
+  bigint,
   varchar,
   text,
   timestamp,
-  bigint,
   int,
+  bigint,
   decimal,
   boolean,
   json,
   index,
 } from "drizzle-orm/mysql-core";
+import { restaurants } from "./restaurants";
+import { branches } from "./restaurants";
 
 // ─────────────────────────────────────────────
 // CATEGORIES (Menu categories)
@@ -19,12 +21,17 @@ import {
 export const categories = mysqlTable(
   "categories",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     image: text("image"),
@@ -32,13 +39,18 @@ export const categories = mysqlTable(
     status: mysqlEnum("status", ["active", "inactive"])
       .default("active")
       .notNull(),
-    parentId: bigint("parent_id", { mode: "number", unsigned: true }),
+    parentId: bigint("parent_id", { mode: "number", unsigned: true }).references(
+      () => categories.id,
+      { onDelete: "cascade" }
+    ),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
     restaurantIdx: index("cat_restaurant_idx").on(table.restaurantId),
+    branchIdx: index("cat_branch_idx").on(table.branchId),
     statusIdx: index("cat_status_idx").on(table.status),
+    parentIdx: index("cat_parent_idx").on(table.parentId),
   })
 );
 
@@ -51,16 +63,23 @@ export type InsertCategory = typeof categories.$inferInsert;
 export const menuItems = mysqlTable(
   "menu_items",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     categoryId: bigint("category_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
+    })
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     shortCode: varchar("short_code", { length: 50 }),
@@ -91,14 +110,18 @@ export const menuItems = mysqlTable(
     status: mysqlEnum("status", ["active", "inactive"])
       .default("active")
       .notNull(),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
     restaurantIdx: index("item_restaurant_idx").on(table.restaurantId),
+    branchIdx: index("item_branch_idx").on(table.branchId),
     categoryIdx: index("item_category_idx").on(table.categoryId),
     statusIdx: index("item_status_idx").on(table.status),
     availabilityIdx: index("item_availability_idx").on(table.availability),
+    shortCodeIdx: index("item_shortcode_idx").on(table.shortCode),
+    deletedIdx: index("item_deleted_idx").on(table.deletedAt),
     restaurantStatusIdx: index("item_rest_status_idx").on(table.restaurantId, table.status),
     restaurantCategoryIdx: index("item_rest_cat_idx").on(table.restaurantId, table.categoryId),
   })

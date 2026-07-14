@@ -30,6 +30,7 @@ export async function verifySessionToken(
     const secret = new TextEncoder().encode(env.appSecret);
     const { payload } = await jose.jwtVerify(token, secret, {
       algorithms: [JWT_ALG],
+      clockTolerance: 60, // Allow 60 seconds of clock skew (common on shared hosting)
     });
     const { unionId, clientId } = payload;
     if (!unionId || !clientId) {
@@ -37,8 +38,15 @@ export async function verifySessionToken(
       return null;
     }
     return { unionId: String(unionId), clientId: String(clientId) } as SessionPayload;
-  } catch (error) {
-    console.warn("[session] JWT verification failed:", error);
+  } catch (error: any) {
+    // Log specific error type for debugging without leaking to client
+    if (error?.code === "ERR_JWT_EXPIRED") {
+      console.warn("[session] JWT verification failed: token expired");
+    } else if (error?.code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED") {
+      console.warn("[session] JWT verification failed: invalid signature");
+    } else {
+      console.warn("[session] JWT verification failed:", error?.message || error);
+    }
     return null;
   }
 }

@@ -32,11 +32,60 @@ function parseSslOption(value: string | null): any {
   }
 }
 
+function parseDatabaseUrl(urlString: string) {
+  // Defensive parsing: try URL first, fallback to manual regex for edge cases
+  // (e.g. passwords with unencoded special chars, or missing protocol)
+  let url: URL;
+  try {
+    url = new URL(urlString);
+  } catch (err) {
+    console.warn("[DB] Failed to parse DATABASE_URL with URL constructor, trying fallback parser:", err);
+    const fallback = parseDatabaseUrlFallback(urlString);
+    if (!fallback) {
+      throw new Error(`Invalid DATABASE_URL: unable to parse connection string`);
+    }
+    return fallback;
+  }
+
+  const pathname = url.pathname || "";
+  const database = pathname.replace(/^\//, "").split("?")[0];
+
+  if (!database) {
+    throw new Error(`Invalid DATABASE_URL: no database name found in path`);
+  }
+
+  return {
+    host: url.hostname,
+    port: url.port ? Number(url.port) : 3306,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database,
+    sslQueryParam: url.searchParams.get("ssl"),
+  };
+}
+
+function parseDatabaseUrlFallback(urlString: string) {
+  // Fallback regex parser for mysql://user:pass@host:port/db
+  const match = urlString.match(
+    /^mysql:\/\/([^:@]+)(?::([^@]*))?@([^:\/]+)(?::(\d+))?\/([^?]+)(?:\?.*)?$/i
+  );
+  if (!match) return null;
+
+  return {
+    host: match[3],
+    port: match[4] ? Number(match[4]) : 3306,
+    user: decodeURIComponent(match[1]),
+    password: match[2] ? decodeURIComponent(match[2]) : "",
+    database: match[5],
+    sslQueryParam: null,
+  };
+}
+
 function buildPoolConfig() {
-  const url = new URL(env.databaseUrl);
+  const parsed = parseDatabaseUrl(env.databaseUrl);
 
   // Read SSL from the query string first, then allow DB_SSL_MODE to override.
-  let ssl = parseSslOption(url.searchParams.get("ssl"));
+  let ssl = parseSslOption(parsed.sslQueryParam);
 
   const sslMode = process.env.DB_SSL_MODE?.toLowerCase();
   if (sslMode === "disabled" || sslMode === "false" || sslMode === "no") {
@@ -50,32 +99,43 @@ function buildPoolConfig() {
   // TiDB Cloud serverless clusters require secure transport (TLS/SSL).
   // If SSL isn't explicitly configured, default to a permissive TLS mode
   // to prevent runtime failures: "Connections using insecure transport are prohibited".
-  const looksLikeTidbCloud = /tidbcloud/i.test(url.hostname);
+  const looksLikeTidbCloud = /tidbcloud/i.test(parsed.host);
   // If DB_SSL_MODE is unset, or explicitly set to accept-invalid/self-signed,
   // keep the permissive TLS default for TiDB Cloud.
   if (!ssl && looksLikeTidbCloud && (!sslMode || sslMode === "accept-invalid" || sslMode === "self-signed")) {
     ssl = { rejectUnauthorized: false };
   }
 
+  // cPanel / shared hosting: if host is localhost/127.0.0.1 and no explicit SSL mode,
+  // default to disabled to avoid SSL handshake errors
+  const isLocalhost = /^(localhost|127\.0\.0\.1)$/i.test(parsed.host);
+  if (!ssl && isLocalhost && !sslMode) {
+    ssl = undefined;
+  }
 
+  const connectionLimit = Number(process.env.DB_CONNECTION_LIMIT || "10");
+  const connectTimeout = Number(process.env.DB_CONNECT_TIMEOUT || "10000");
+  const acquireTimeout = Number(process.env.DB_ACQUIRE_TIMEOUT || "10000");
+  const queueLimit = Number(process.env.DB_QUEUE_LIMIT || "20");
 
   return {
-    host: url.hostname,
-    // Standard MySQL default is 3306. Only specify a port in the URL when the host requires it.
-    port: url.port ? Number(url.port) : 3306,
-    user: url.username,
-    // Safely decodes special symbols (@, #, $) inside the password.
-    password: decodeURIComponent(url.password),
-    // Isolates ONLY the dbname by stripping away trailing ?ssl=... parameters.
-    database: url.pathname.replace(/^\//, "").split("?")[0],
+    host: parsed.host,
+    port: parsed.port,
+    user: parsed.user,
+    password: parsed.password,
+    database: parsed.database,
     ssl,
-    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || "10"),
-    // Keep idle connections alive on shared hosting to reduce handshake churn.
+    connectionLimit: Math.max(1, Math.min(connectionLimit, 50)),
+    connectTimeout,
+    acquireTimeout,
+    waitForConnections: true,
+    queueLimit: Math.max(0, queueLimit),
     enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
   };
 }
 
-async function testConnection(pool: mysql.Pool) {
+async function testConnection(pool: mysql.Pool): Promise<void> {
   const conn = await pool.getConnection();
   try {
     await conn.query("SELECT 1");
@@ -95,21 +155,8 @@ export function getDb() {
     const connectionPool = mysql.createPool(config);
     poolInstance = connectionPool;
 
-    const baseDb = drizzle(connectionPool as any);
-
-    const dialect = (baseDb as any).dialect;
-    const createRootQueries = (dialect as any)?.createRootQueries;
-
-    if (typeof createRootQueries === "function") {
-      const rootQueries = createRootQueries(baseDb as any, fullSchema as any);
-      Object.assign(baseDb as any, rootQueries);
-      Object.assign(baseDb as any, {
-        query: (rootQueries as any).query,
-        queries: (rootQueries as any).queries,
-      });
-    } else {
-      Object.assign(baseDb as any, { schema: fullSchema });
-    }
+    // Use drizzle with the schema directly — mode "default" for standard mysql2 driver
+    const baseDb = drizzle(connectionPool, { schema: fullSchema as any, mode: "default" });
 
     // Verify connectivity once on first use. This surfaces connection problems
     // early instead of showing a raw SQL error to the end user.
@@ -156,4 +203,10 @@ export async function checkDatabaseConnection(): Promise<{ ok: boolean; error?: 
   } catch (err: any) {
     return { ok: false, error: err?.message || String(err) };
   }
+}
+
+// Force-reset the pool (useful for retrying after a transient DB failure)
+export async function resetDb() {
+  await closeDb();
+  return getDb();
 }

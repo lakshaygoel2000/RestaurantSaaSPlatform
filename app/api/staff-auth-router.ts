@@ -112,7 +112,27 @@ export const staffAuthRouter = createRouter({
         };
       } catch (err) {
         if (err instanceof TRPCError) throw err;
-        console.error("[auth.login] Unexpected error:", err);
+
+        // Distinguish database errors from unexpected logic errors
+        const isDbError =
+          err &&
+          typeof err === "object" &&
+          ((err as any).code?.startsWith("ECONN") ||
+            (err as any).code === "PROTOCOL_CONNECTION_LOST" ||
+            (err as any).code === "ER_ACCESS_DENIED_ERROR" ||
+            (err as any).code === "ER_BAD_DB_ERROR" ||
+            (err as any).sqlMessage ||
+            (err as any).sql);
+
+        if (isDbError) {
+          console.error("[staffAuth.login] DATABASE ERROR:", err);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database connection failed. Please check server logs.",
+          });
+        }
+
+        console.error("[staffAuth.login] Unexpected error:", err);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Login service unavailable. Please try again in a moment.",

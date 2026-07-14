@@ -154,75 +154,104 @@ export const authRouter = createRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
+      try {
+        const db = getDb();
 
-      const owner = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, input.email))
-        .then((rows: any[]) => rows[0]);
+        const owner = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, input.email))
+          .then((rows: any[]) => rows[0]);
 
-      if (!owner) {
+        if (!owner) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid email or password",
+          });
+        }
+
+        if (owner.status === "inactive") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Account is inactive. Contact support.",
+          });
+        }
+
+        const validPassword = await verifyPassword(input.password, owner.passwordHash);
+        if (!validPassword) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid email or password",
+          });
+        }
+
+        const restaurant = await db
+          .select()
+          .from(restaurants)
+          .where(eq(restaurants.id, owner.restaurantId))
+          .then((rows: any[]) => rows[0]);
+
+        // Update last sign in
+        await db
+          .update(users)
+          .set({ lastSignInAt: new Date() })
+          .where(eq(users.id, owner.id));
+
+        const token = await signSessionToken({
+          unionId: `owner_${owner.id}`,
+          clientId: restaurant?.slug || "restaurantos",
+        });
+
+        return {
+          token,
+          owner: {
+            id: owner.id,
+            name: owner.name,
+            email: owner.email,
+            role: owner.role,
+            restaurantId: owner.restaurantId,
+          },
+          restaurant: restaurant
+            ? {
+                id: restaurant.id,
+                name: restaurant.name,
+                slug: restaurant.slug,
+                status: restaurant.status,
+                subscriptionPlan: restaurant.subscriptionPlan,
+                subscriptionStatus: restaurant.subscriptionStatus,
+                trialEndsAt: restaurant.trialEndsAt,
+                subscriptionExpiresAt: restaurant.subscriptionExpiresAt,
+              }
+            : null,
+        };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+
+        // Distinguish database errors from unexpected logic errors
+        const isDbError =
+          err &&
+          typeof err === "object" &&
+          ((err as any).code?.startsWith("ECONN") ||
+            (err as any).code === "PROTOCOL_CONNECTION_LOST" ||
+            (err as any).code === "ER_ACCESS_DENIED_ERROR" ||
+            (err as any).code === "ER_BAD_DB_ERROR" ||
+            (err as any).sqlMessage ||
+            (err as any).sql);
+
+        if (isDbError) {
+          console.error("[auth.ownerLogin] DATABASE ERROR:", err);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database connection failed. Please check server logs.",
+          });
+        }
+
+        console.error("[auth.ownerLogin] Unexpected error:", err);
         throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Invalid email or password",
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Login service unavailable. Please try again in a moment.",
         });
       }
-
-      if (owner.status === "inactive") {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Account is inactive. Contact support.",
-        });
-      }
-
-      const validPassword = await verifyPassword(input.password, owner.passwordHash);
-      if (!validPassword) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Invalid email or password",
-        });
-      }
-
-      const restaurant = await db
-        .select()
-        .from(restaurants)
-        .where(eq(restaurants.id, owner.restaurantId))
-        .then((rows: any[]) => rows[0]);
-
-      // Update last sign in
-      await db
-        .update(users)
-        .set({ lastSignInAt: new Date() })
-        .where(eq(users.id, owner.id));
-
-      const token = await signSessionToken({
-        unionId: `owner_${owner.id}`,
-        clientId: restaurant?.slug || "restaurantos",
-      });
-
-      return {
-        token,
-        owner: {
-          id: owner.id,
-          name: owner.name,
-          email: owner.email,
-          role: owner.role,
-          restaurantId: owner.restaurantId,
-        },
-        restaurant: restaurant
-          ? {
-              id: restaurant.id,
-              name: restaurant.name,
-              slug: restaurant.slug,
-              status: restaurant.status,
-              subscriptionPlan: restaurant.subscriptionPlan,
-              subscriptionStatus: restaurant.subscriptionStatus,
-              trialEndsAt: restaurant.trialEndsAt,
-              subscriptionExpiresAt: restaurant.subscriptionExpiresAt,
-            }
-          : null,
-      };
     }),
 
   // Verify owner token and return owner info

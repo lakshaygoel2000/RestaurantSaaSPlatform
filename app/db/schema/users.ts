@@ -1,13 +1,16 @@
 import {
   mysqlTable,
   mysqlEnum,
-  serial,
+  bigint,
   varchar,
   timestamp,
-  bigint,
+  int,
   boolean,
   uniqueIndex,
+  index,
 } from "drizzle-orm/mysql-core";
+import { restaurants } from "./restaurants";
+
 
 // ─────────────────────────────────────────────
 // USERS (Restaurant owner/admin accounts)
@@ -18,11 +21,13 @@ import {
 export const users = mysqlTable(
   "users",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }),
     email: varchar("email", { length: 320 }).notNull(),
     phone: varchar("phone", { length: 20 }),
@@ -31,6 +36,7 @@ export const users = mysqlTable(
     status: mysqlEnum("status", ["active", "inactive"])
       .default("active")
       .notNull(),
+
     emailVerified: boolean("email_verified").default(false).notNull(),
     lastSignInAt: timestamp("last_sign_in_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -38,9 +44,10 @@ export const users = mysqlTable(
   },
   (table) => ({
     emailIdx: uniqueIndex("user_email_idx").on(table.email),
-    restaurantIdx: uniqueIndex("user_restaurant_idx").on(table.restaurantId),
+    restaurantIdx: index("user_restaurant_idx").on(table.restaurantId),
   })
 );
+
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

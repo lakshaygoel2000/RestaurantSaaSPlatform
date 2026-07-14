@@ -1,17 +1,21 @@
 import {
   mysqlTable,
   mysqlEnum,
-  serial,
+  bigint,
   varchar,
   text,
   timestamp,
-  bigint,
+  int,
   decimal,
   date,
   json,
   index,
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
+import { restaurants } from "./restaurants";
+import { branches } from "./restaurants";
+import { users } from "./users";
+
 
 // ─────────────────────────────────────────────
 // STAFF (Restaurant employees)
@@ -19,13 +23,21 @@ import {
 export const staff = mysqlTable(
   "staff",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
-    userId: bigint("user_id", { mode: "number", unsigned: true }),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
+    userId: bigint("user_id", { mode: "number", unsigned: true }).references(
+      () => users.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 320 }),
     phone: varchar("phone", { length: 20 }),
@@ -48,10 +60,13 @@ export const staff = mysqlTable(
     status: mysqlEnum("status", ["active", "inactive", "on_leave"])
       .default("active")
       .notNull(),
-    username: varchar("username", { length: 255 }).unique(),
+    username: varchar("username", { length: 255 }).notNull(),
+
+
     passwordHash: varchar("password_hash", { length: 255 }),
     address: text("address"),
     lastActiveAt: timestamp("last_active_at"),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -61,6 +76,10 @@ export const staff = mysqlTable(
     roleIdx: index("staff_role_idx").on(table.role),
     statusIdx: index("staff_status_idx").on(table.status),
     usernameIdx: uniqueIndex("staff_username_idx").on(table.username),
+    emailIdx: index("staff_email_idx").on(table.email),
+    phoneIdx: index("staff_phone_idx").on(table.phone),
+    deletedIdx: index("staff_deleted_idx").on(table.deletedAt),
+
     restaurantRoleIdx: index("staff_rest_role_idx").on(table.restaurantId, table.role),
     restaurantStatusIdx: index("staff_rest_status_idx").on(table.restaurantId, table.status),
   })

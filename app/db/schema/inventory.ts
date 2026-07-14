@@ -1,15 +1,17 @@
 import {
   mysqlTable,
   mysqlEnum,
-  serial,
+  bigint,
   varchar,
   text,
   timestamp,
-  bigint,
+  int,
   decimal,
   date,
   index,
 } from "drizzle-orm/mysql-core";
+import { restaurants } from "./restaurants";
+import { branches } from "./restaurants";
 
 // ─────────────────────────────────────────────
 // INVENTORY ITEMS
@@ -17,12 +19,17 @@ import {
 export const inventoryItems = mysqlTable(
   "inventory_items",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
-    branchId: bigint("branch_id", { mode: "number", unsigned: true }),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: bigint("branch_id", { mode: "number", unsigned: true }).references(
+      () => branches.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     category: varchar("category", { length: 100 }),
     unit: varchar("unit", { length: 50 }).notNull(),
@@ -42,13 +49,18 @@ export const inventoryItems = mysqlTable(
     status: mysqlEnum("status", ["in_stock", "low_stock", "out_of_stock"])
       .default("in_stock")
       .notNull(),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
     restaurantIdx: index("inv_restaurant_idx").on(table.restaurantId),
+    branchIdx: index("inv_branch_idx").on(table.branchId),
+    categoryIdx: index("inv_category_idx").on(table.category),
+    nameIdx: index("inv_name_idx").on(table.name),
     statusIdx: index("inv_status_idx").on(table.status),
     supplierIdx: index("inv_supplier_idx").on(table.supplierId),
+    deletedIdx: index("inv_deleted_idx").on(table.deletedAt),
     restaurantStatusIdx: index("inv_rest_status_idx").on(table.restaurantId, table.status),
   })
 );
@@ -62,11 +74,13 @@ export type InsertInventoryItem = typeof inventoryItems.$inferInsert;
 export const suppliers = mysqlTable(
   "suppliers",
   {
-    id: serial("id").primaryKey(),
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
     restaurantId: bigint("restaurant_id", {
       mode: "number",
       unsigned: true,
-    }).notNull(),
+    })
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     contactPerson: varchar("contact_person", { length: 255 }),
     phone: varchar("phone", { length: 20 }),
@@ -82,6 +96,8 @@ export const suppliers = mysqlTable(
   },
   (table) => ({
     restaurantIdx: index("supp_restaurant_idx").on(table.restaurantId),
+    statusIdx: index("supp_status_idx").on(table.status),
+    nameIdx: index("supp_name_idx").on(table.name),
   })
 );
 
