@@ -52947,12 +52947,26 @@ var app = new Hono2();
 app.use(
   "*",
   cors({
-    origin: env.isProduction ? process.env.ALLOWED_ORIGIN ?? "*" : "*",
+    origin: (origin, c) => {
+      if (origin && origin.length > 0) {
+        return origin;
+      }
+      return "*";
+    },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true
   })
 );
+app.use("*", async (c, next) => {
+  await next();
+  const origin = c.req.header("origin");
+  if (origin) {
+    c.header("Access-Control-Allow-Origin", origin);
+    c.header("Vary", "Origin");
+  }
+  c.header("Access-Control-Allow-Credentials", "true");
+});
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 async function healthHandler(c) {
   const db = await checkDatabaseConnection();

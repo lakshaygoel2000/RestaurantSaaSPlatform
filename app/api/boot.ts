@@ -10,19 +10,38 @@ import { env } from "./lib/env";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
-// CORS: allow any origin in development; in production the SPA is served from
-// the same origin so this is mainly a safety net for custom domains / CDNs.
+// CORS: allow any origin in development; in production reflect the request origin
+// (needed for mobile apps with credentials).
+// When credentials: true is set, Access-Control-Allow-Origin cannot be wildcard '*'.
 app.use(
   "*",
   cors({
-    origin: env.isProduction
-      ? process.env.ALLOWED_ORIGIN ?? "*"
-      : "*",
+    origin: (origin, c) => {
+      // Always reflect the actual request origin when credentials are used.
+      // This is the most reliable approach for mobile apps.
+      if (origin && origin.length > 0) {
+        return origin;
+      }
+      // Fallback for requests without an Origin header
+      return "*";
+    },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
+
+// Additional CORS safety net: ensure Vary: Origin is always set
+// and Access-Control-Allow-Origin is never wildcard when credentials are used.
+app.use("*", async (c, next) => {
+  await next();
+  const origin = c.req.header("origin");
+  if (origin) {
+    c.header("Access-Control-Allow-Origin", origin);
+    c.header("Vary", "Origin");
+  }
+  c.header("Access-Control-Allow-Credentials", "true");
+});
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 

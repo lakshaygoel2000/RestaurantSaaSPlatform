@@ -22,10 +22,37 @@ function getAuthToken(): string | null {
   );
 }
 
+/**
+ * Detect if running inside a Capacitor native app.
+ * Capacitor injects a global `Capacitor` object into the webview.
+ */
+function isCapacitorApp(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    // @ts-expect-error Capacitor is injected at runtime
+    typeof window.Capacitor !== "undefined" && window.Capacitor.isNativePlatform?.() === true
+  );
+}
+
+/**
+ * Get the API base URL.
+ * - In Capacitor (mobile app): use the production API URL from env
+ * - In browser: use relative URL (same origin)
+ */
+function getApiUrl(): string {
+  // Capacitor apps load from file:// or capacitor:// so they need an absolute URL
+  if (isCapacitorApp()) {
+    // Use the production API URL. Falls back to the known production domain.
+    return import.meta.env.VITE_API_URL || "https://restaurantos.doxcod.com/api/trpc";
+  }
+  // Browser: relative URL works fine (same origin)
+  return "/api/trpc";
+}
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
-      url: "/api/trpc",
+      url: getApiUrl(),
       transformer: superjson,
       headers() {
         const token = getAuthToken();

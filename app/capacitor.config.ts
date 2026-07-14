@@ -6,6 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'dist/public',
   server: {
     cleartext: true,
+    // Allow the app to make requests to the API server
+    // The actual API URL is configured in the frontend code (trpc.tsx)
   },
   android: {
     allowMixedContent: true,
